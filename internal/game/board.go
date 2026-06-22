@@ -51,6 +51,23 @@ func (b *Board) LockPiece(p Piece) {
 	}
 }
 
+func (b *Board) FullRows() []int {
+	var rows []int
+	for y := 0; y < Height; y++ {
+		full := true
+		for x := 0; x < Width; x++ {
+			if b.cells[y][x] == Empty {
+				full = false
+				break
+			}
+		}
+		if full {
+			rows = append(rows, y)
+		}
+	}
+	return rows
+}
+
 func (b *Board) ClearLines() int {
 	cleared := 0
 	for y := Height - 1; y >= 0; y-- {

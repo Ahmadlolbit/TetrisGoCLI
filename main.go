@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"awesomeProject/internal/effects"
 	"awesomeProject/internal/game"
 	"awesomeProject/internal/input"
 	"awesomeProject/internal/render"
@@ -50,8 +51,10 @@ func main() {
 }
 
 func loop(scr *render.Screen, in *input.Reader) {
-	g := game.NewGame(time.Now().UnixNano())
-	th := neon
+	seed := time.Now().UnixNano()
+	g := game.NewGame(seed)
+	eng := effects.New(seed)
+	themeIdx := 0
 	paused := false
 
 	ticker := time.NewTicker(frameDelay)
@@ -59,13 +62,18 @@ func loop(scr *render.Screen, in *input.Reader) {
 	dt := frameDelay.Seconds()
 
 	for {
+		th := themes[themeIdx]
 		select {
 		case ev := <-in.Events():
 			switch ev {
 			case input.Quit:
 				return
+			case input.ThemeNext:
+				themeIdx = (themeIdx + 1) % len(themes)
 			case input.Restart:
-				g = game.NewGame(time.Now().UnixNano())
+				seed = time.Now().UnixNano()
+				g = game.NewGame(seed)
+				eng.Clear()
 				paused = false
 			case input.Pause:
 				if !g.Over {
@@ -73,14 +81,24 @@ func loop(scr *render.Screen, in *input.Reader) {
 				}
 			default:
 				if !paused && !g.Over {
-					apply(g, ev)
+					apply(g, eng, ev, scr.W, scr.H, th)
 				}
 			}
 		case <-ticker.C:
 			if !paused && !g.Over {
-				g.Tick(dt)
+				before := g.Level
+				ox, oy := origin(scr.W, scr.H)
+				for _, res := range g.Tick(dt) {
+					spawnLockEffects(eng, res, ox, oy, th)
+				}
+				if g.Level > before {
+					spawnLevelUp(eng, ox, oy, th)
+				}
 			}
-			draw(scr.Back(), g, th)
+			eng.Update(dt)
+			sx, sy := eng.ShakeOffset()
+			draw(scr.Back(), g, th, sx, sy)
+			eng.Apply(scr.Back(), sx, sy)
 			if paused && !g.Over {
 				drawBanner(scr.Back(), (scr.W-compositeW)/2+boardOffset, (scr.H-compositeH)/2, "PAUSED", "press P to resume", th)
 			}
@@ -89,7 +107,8 @@ func loop(scr *render.Screen, in *input.Reader) {
 	}
 }
 
-func apply(g *game.Game, ev input.Event) {
+func apply(g *game.Game, eng *effects.Engine, ev input.Event, w, h int, th theme) {
+	ox, oy := origin(w, h)
 	switch ev {
 	case input.MoveLeft:
 		g.TryMove(-1, 0)
@@ -98,7 +117,14 @@ func apply(g *game.Game, ev input.Event) {
 	case input.SoftDrop:
 		g.SoftDrop()
 	case input.HardDrop:
-		g.HardDrop()
+		landing := g.Ghost()
+		before := g.Level
+		res := g.HardDrop()
+		spawnHardDrop(eng, landing, ox, oy, th)
+		spawnLockEffects(eng, res, ox, oy, th)
+		if g.Level > before {
+			spawnLevelUp(eng, ox, oy, th)
+		}
 	case input.RotateCW:
 		g.Rotate(game.CW)
 	case input.RotateCCW:

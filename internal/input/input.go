@@ -18,6 +18,7 @@ const (
 	Hold
 	Pause
 	Restart
+	ThemeNext
 	Quit
 )
 
@@ -80,6 +81,8 @@ func (r *Reader) parse(b []byte) {
 			r.emit(Pause)
 		case 'r', 'R':
 			r.emit(Restart)
+		case 't', 'T':
+			r.emit(ThemeNext)
 		case 0x1b:
 			if i+2 < len(b) && b[i+1] == '[' {
 				switch b[i+2] {
