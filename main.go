@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"awesomeProject/internal/chaos"
 	"awesomeProject/internal/effects"
 	"awesomeProject/internal/game"
 	"awesomeProject/internal/input"
@@ -54,6 +55,7 @@ func loop(scr *render.Screen, in *input.Reader) {
 	seed := time.Now().UnixNano()
 	g := game.NewGame(seed)
 	eng := effects.New(seed)
+	ch := chaos.New(seed, true)
 	themeIdx := 0
 	paused := false
 
@@ -70,10 +72,13 @@ func loop(scr *render.Screen, in *input.Reader) {
 				return
 			case input.ThemeNext:
 				themeIdx = (themeIdx + 1) % len(themes)
+			case input.ToggleChaos:
+				ch.Toggle()
 			case input.Restart:
 				seed = time.Now().UnixNano()
 				g = game.NewGame(seed)
 				eng.Clear()
+				ch.Reset()
 				paused = false
 			case input.Pause:
 				if !g.Over {
@@ -81,15 +86,21 @@ func loop(scr *render.Screen, in *input.Reader) {
 				}
 			default:
 				if !paused && !g.Over {
-					apply(g, eng, ev, scr.W, scr.H, th)
+					apply(g, eng, ch, ev, scr.W, scr.H, th)
 				}
 			}
 		case <-ticker.C:
+			ox, oy := origin(scr.W, scr.H)
 			if !paused && !g.Over {
+				if fired, ok := ch.Update(dt, g); ok {
+					spawnChaos(eng, fired, ox, oy, th)
+				}
+				g.GravityScale = ch.GravityScale()
+				g.ScoreScale = ch.ScoreScale()
 				before := g.Level
-				ox, oy := origin(scr.W, scr.H)
 				for _, res := range g.Tick(dt) {
 					spawnLockEffects(eng, res, ox, oy, th)
+					ch.OnPiece()
 				}
 				if g.Level > before {
 					spawnLevelUp(eng, ox, oy, th)
@@ -97,7 +108,7 @@ func loop(scr *render.Screen, in *input.Reader) {
 			}
 			eng.Update(dt)
 			sx, sy := eng.ShakeOffset()
-			draw(scr.Back(), g, th, sx, sy)
+			draw(scr.Back(), g, ch, th, sx, sy)
 			eng.Apply(scr.Back(), sx, sy)
 			if paused && !g.Over {
 				drawBanner(scr.Back(), (scr.W-compositeW)/2+boardOffset, (scr.H-compositeH)/2, "PAUSED", "press P to resume", th)
@@ -107,7 +118,7 @@ func loop(scr *render.Screen, in *input.Reader) {
 	}
 }
 
-func apply(g *game.Game, eng *effects.Engine, ev input.Event, w, h int, th theme) {
+func apply(g *game.Game, eng *effects.Engine, ch *chaos.Engine, ev input.Event, w, h int, th theme) {
 	ox, oy := origin(w, h)
 	switch ev {
 	case input.MoveLeft:
@@ -122,6 +133,7 @@ func apply(g *game.Game, eng *effects.Engine, ev input.Event, w, h int, th theme
 		res := g.HardDrop()
 		spawnHardDrop(eng, landing, ox, oy, th)
 		spawnLockEffects(eng, res, ox, oy, th)
+		ch.OnPiece()
 		if g.Level > before {
 			spawnLevelUp(eng, ox, oy, th)
 		}

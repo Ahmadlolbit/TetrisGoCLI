@@ -38,16 +38,18 @@ var gravityTable = map[int]float64{
 }
 
 type Game struct {
-	Board      *Board
-	Current    Piece
-	HoldType   PieceType
-	NextQueue  []PieceType
-	Score      int
-	Level      int
-	Lines      int
-	Combo      int
-	BackToBack bool
-	Over       bool
+	Board        *Board
+	Current      Piece
+	HoldType     PieceType
+	NextQueue    []PieceType
+	Score        int
+	Level        int
+	Lines        int
+	Combo        int
+	BackToBack   bool
+	Over         bool
+	GravityScale float64
+	ScoreScale   float64
 
 	bag             *Bag
 	holdUsed        bool
@@ -68,11 +70,13 @@ func NewGameAtLevel(seed int64, level int) *Game {
 		level = 1
 	}
 	g := &Game{
-		Board:      NewBoard(),
-		bag:        NewBag(seed),
-		HoldType:   Empty,
-		Level:      level,
-		startLevel: level,
+		Board:        NewBoard(),
+		bag:          NewBag(seed),
+		HoldType:     Empty,
+		Level:        level,
+		startLevel:   level,
+		GravityScale: 1,
+		ScoreScale:   1,
 	}
 	g.refillQueue()
 	g.spawn()
@@ -223,7 +227,11 @@ func (g *Game) gravitySpeed() float64 {
 	if l > 20 {
 		l = 20
 	}
-	return gravityTable[l]
+	scale := g.GravityScale
+	if scale <= 0 {
+		scale = 1
+	}
+	return gravityTable[l] * scale
 }
 
 func (g *Game) lockPiece() LockResult {
@@ -339,6 +347,9 @@ func (g *Game) scoreClear(cleared int, tspin TSpinType) LockResult {
 		g.Combo = 0
 	}
 
+	if g.ScoreScale > 1 {
+		gain = int(float64(gain) * g.ScoreScale)
+	}
 	g.Score += gain
 	g.Lines += cleared
 	g.Level = g.startLevel + g.Lines/10

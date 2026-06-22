@@ -51,6 +51,24 @@ func (b *Board) LockPiece(p Piece) {
 	}
 }
 
+func (b *Board) AddGarbage(rows, gap int) {
+	if gap < 0 || gap >= Width {
+		gap = 0
+	}
+	for i := 0; i < rows; i++ {
+		for y := 0; y < Height-1; y++ {
+			b.cells[y] = b.cells[y+1]
+		}
+		var row [Width]PieceType
+		for x := 0; x < Width; x++ {
+			if x != gap {
+				row[x] = Garbage
+			}
+		}
+		b.cells[Height-1] = row
+	}
+}
+
 func (b *Board) FullRows() []int {
 	var rows []int
 	for y := 0; y < Height; y++ {

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"awesomeProject/internal/chaos"
 	"awesomeProject/internal/effects"
 	"awesomeProject/internal/game"
 	"awesomeProject/internal/render"
@@ -102,7 +103,11 @@ func boardInterior(ox, oy int) (int, int) {
 	return ox + boardOffset + 1, oy + 1
 }
 
-func draw(b *render.Buffer, g *game.Game, th theme, shakeX, shakeY int) {
+func pieceColor(th theme, ch *chaos.Engine, t game.PieceType) render.Color {
+	return th.pieces[ch.Remap(t)]
+}
+
+func draw(b *render.Buffer, g *game.Game, ch *chaos.Engine, th theme, shakeX, shakeY int) {
 	b.Reset(th.background)
 	ox, oy := origin(b.W, b.H)
 	ox += shakeX
@@ -111,20 +116,21 @@ func draw(b *render.Buffer, g *game.Game, th theme, shakeX, shakeY int) {
 	title := "C H A O S   B L O C K S"
 	b.Text(ox+(compositeW-len(title))/2, oy-1, title, th.pieces[game.T], th.background)
 
-	drawPlayfield(b, g, th, ox+boardOffset, oy)
+	drawPlayfield(b, g, ch, th, ox+boardOffset, oy)
 	drawLeftPanel(b, g, th, ox, oy)
-	drawRightPanel(b, g, th, ox+boardOffset+game.Width*cellW+3, oy)
+	drawRightPanel(b, g, ch, th, ox+boardOffset+game.Width*cellW+3, oy)
 
 	if g.Over {
 		drawBanner(b, ox+boardOffset, oy, "GAME OVER", "press R to restart", th)
 	}
 }
 
-func drawPlayfield(b *render.Buffer, g *game.Game, th theme, x, y int) {
+func drawPlayfield(b *render.Buffer, g *game.Game, ch *chaos.Engine, th theme, x, y int) {
 	w := game.Width*cellW + 2
 	drawBox(b, x, y, w, game.VisibleRows+2, "", th)
 	bx := x + 1
 	by := y + 1
+	dimmed := ch.Active() == chaos.LightsDim
 	for ry := 0; ry < game.VisibleRows; ry++ {
 		gy := game.VisibleTop + ry
 		for gx := 0; gx < game.Width; gx++ {
@@ -132,16 +138,24 @@ func drawPlayfield(b *render.Buffer, g *game.Game, th theme, x, y int) {
 			py := by + ry
 			c := g.Board.At(gx, gy)
 			if c == game.Empty {
-				b.Set(px, py, cellOf('·', th.dim, th.empty))
-				b.Set(px+1, py, cellOf(' ', th.dim, th.empty))
+				empty := th.empty
+				if dimmed {
+					empty = render.Lerp(empty, th.background, 0.6)
+				}
+				b.Set(px, py, cellOf('·', th.dim, empty))
+				b.Set(px+1, py, cellOf(' ', th.dim, empty))
 			} else {
-				putBlock(b, px, py, th.pieces[c])
+				col := pieceColor(th, ch, c)
+				if dimmed {
+					col = render.Lerp(col, th.background, 0.72)
+				}
+				putBlock(b, px, py, col)
 			}
 		}
 	}
 
 	gp := g.Ghost()
-	ghostCol := render.Lerp(th.pieces[gp.Type], th.background, 0.55)
+	ghostCol := render.Lerp(pieceColor(th, ch, gp.Type), th.background, 0.55)
 	for _, c := range gp.Cells() {
 		if c.Y < game.VisibleTop {
 			continue
@@ -156,7 +170,7 @@ func drawPlayfield(b *render.Buffer, g *game.Game, th theme, x, y int) {
 		if c.Y < game.VisibleTop {
 			continue
 		}
-		putBlock(b, bx+c.X*cellW, by+(c.Y-game.VisibleTop), th.pieces[g.Current.Type])
+		putBlock(b, bx+c.X*cellW, by+(c.Y-game.VisibleTop), pieceColor(th, ch, g.Current.Type))
 	}
 }
 
@@ -174,7 +188,7 @@ func drawLeftPanel(b *render.Buffer, g *game.Game, th theme, x, y int) {
 	b.Text(x+2, stats+8, fmt.Sprintf("%d", g.Lines), th.text, th.background)
 }
 
-func drawRightPanel(b *render.Buffer, g *game.Game, th theme, x, y int) {
+func drawRightPanel(b *render.Buffer, g *game.Game, ch *chaos.Engine, th theme, x, y int) {
 	drawBox(b, x, y, 12, 13, "NEXT", th)
 	for i, t := range g.NextQueue {
 		if i >= 4 {
@@ -195,6 +209,32 @@ func drawRightPanel(b *render.Buffer, g *game.Game, th theme, x, y int) {
 		b.Text(x+2, info+3, "BACK2BACK", th.pieces[game.I], th.background)
 	} else {
 		b.Text(x+2, info+3, "B2B -", th.dim, th.background)
+	}
+
+	drawChaosMeter(b, ch, th, x+2, info+5)
+}
+
+func drawChaosMeter(b *render.Buffer, ch *chaos.Engine, th theme, x, y int) {
+	if !ch.Enabled {
+		b.Text(x, y, "CLASSIC", th.dim, th.background)
+		return
+	}
+	b.Text(x, y, "CHAOS", th.pieces[game.T], th.background)
+	barW := 8
+	fill := int(ch.Meter() * float64(barW))
+	for i := 0; i < barW; i++ {
+		col := th.dim
+		if i < fill {
+			col = render.Lerp(th.pieces[game.S], th.pieces[game.Z], float64(i)/float64(barW))
+		}
+		b.Set(x+i, y+1, render.Cell{Ch: '▮', FG: col, BG: th.background})
+	}
+	if name, firing := ch.Status(); name != "" {
+		col := th.text
+		if firing {
+			col = th.pieces[game.Z]
+		}
+		b.Text(x, y+2, name, col, th.background)
 	}
 }
 
@@ -255,6 +295,20 @@ func spawnLevelUp(e *effects.Engine, ox, oy int, th theme) {
 	bx, by := boardInterior(ox, oy)
 	e.Flash(bx, by, game.Width*cellW, game.VisibleRows, th.pieces[game.S], 0.6)
 	e.Shake(1.2, 0.3)
+}
+
+func spawnChaos(e *effects.Engine, k chaos.Kind, ox, oy int, th theme) {
+	bx, by := boardInterior(ox, oy)
+	w := game.Width * cellW
+	col := th.pieces[game.T]
+	if k == chaos.BonusFrenzy {
+		col = th.pieces[game.O]
+	}
+	e.Flash(bx, by, w, game.VisibleRows, col, 0.7)
+	e.Shake(1.5, 0.35)
+	for gx := 0; gx < game.Width; gx++ {
+		e.Burst(float64(bx+gx*cellW), float64(by), col, 2, 7)
+	}
 }
 
 var themes = []theme{neon, synthwave, monoglow}
