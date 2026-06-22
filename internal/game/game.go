@@ -21,12 +21,13 @@ const (
 )
 
 type LockResult struct {
-	Lines      int
-	TSpin      TSpinType
-	Score      int
-	Combo      int
-	BackToBack bool
-	Difficult  bool
+	Lines       int
+	ClearedRows []int
+	TSpin       TSpinType
+	Score       int
+	Combo       int
+	BackToBack  bool
+	Difficult   bool
 }
 
 var gravityTable = map[int]float64{
@@ -228,8 +229,10 @@ func (g *Game) gravitySpeed() float64 {
 func (g *Game) lockPiece() LockResult {
 	tspin := g.detectTSpin()
 	g.Board.LockPiece(g.Current)
+	rows := g.Board.FullRows()
 	cleared := g.Board.ClearLines()
 	res := g.scoreClear(cleared, tspin)
+	res.ClearedRows = rows
 	g.holdUsed = false
 	g.spawn()
 	return res

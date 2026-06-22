@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"awesomeProject/internal/effects"
 	"awesomeProject/internal/game"
 	"awesomeProject/internal/render"
 )
@@ -85,16 +86,27 @@ func drawMini(b *render.Buffer, x, y int, t game.PieceType, th theme) {
 	}
 }
 
-func draw(b *render.Buffer, g *game.Game, th theme) {
-	b.Reset(th.background)
-	ox := (b.W - compositeW) / 2
-	oy := (b.H - compositeH) / 2
+func origin(w, h int) (int, int) {
+	ox := (w - compositeW) / 2
+	oy := (h - compositeH) / 2
 	if ox < 0 {
 		ox = 0
 	}
 	if oy < 0 {
 		oy = 0
 	}
+	return ox, oy
+}
+
+func boardInterior(ox, oy int) (int, int) {
+	return ox + boardOffset + 1, oy + 1
+}
+
+func draw(b *render.Buffer, g *game.Game, th theme, shakeX, shakeY int) {
+	b.Reset(th.background)
+	ox, oy := origin(b.W, b.H)
+	ox += shakeX
+	oy += shakeY
 
 	title := "C H A O S   B L O C K S"
 	b.Text(ox+(compositeW-len(title))/2, oy-1, title, th.pieces[game.T], th.background)
@@ -197,4 +209,90 @@ func drawBanner(b *render.Buffer, boardX, boardY int, line1, line2 string, th th
 	}
 	b.Text(boardX+(w-len(line1))/2, cy, line1, th.pieces[game.Z], bg)
 	b.Text(boardX+(w-len(line2))/2, cy+1, line2, th.dim, bg)
+}
+
+func spawnLockEffects(e *effects.Engine, res game.LockResult, ox, oy int, th theme) {
+	bx, by := boardInterior(ox, oy)
+	w := game.Width * cellW
+	for _, gy := range res.ClearedRows {
+		py := by + (gy - game.VisibleTop)
+		e.Flash(bx, py, w, 1, render.RGB(255, 255, 255), 0.35)
+		for gx := 0; gx < game.Width; gx++ {
+			e.Burst(float64(bx+gx*cellW), float64(py), th.text, 2, 6)
+		}
+	}
+	switch {
+	case res.TSpin != game.TSpinNone && res.Lines > 0:
+		e.Flash(bx, by, w, game.VisibleRows, th.pieces[game.T], 0.4)
+		e.Shake(1.6, 0.35)
+	case res.Lines >= 4:
+		e.Flash(bx, by, w, game.VisibleRows, th.pieces[game.I], 0.4)
+		e.Shake(1.9, 0.4)
+	case res.Lines > 0:
+		e.Shake(0.5+float64(res.Lines)*0.25, 0.18)
+	}
+	if res.Combo > 2 {
+		mag := float64(res.Combo-1) * 0.2
+		if mag > 1.4 {
+			mag = 1.4
+		}
+		e.Shake(mag, 0.16)
+	}
+}
+
+func spawnHardDrop(e *effects.Engine, landing game.Piece, ox, oy int, th theme) {
+	bx, by := boardInterior(ox, oy)
+	for _, c := range landing.Cells() {
+		if c.Y < game.VisibleTop {
+			continue
+		}
+		e.Burst(float64(bx+c.X*cellW), float64(by+(c.Y-game.VisibleTop)), th.pieces[landing.Type], 3, 5)
+	}
+	e.Shake(0.7, 0.12)
+}
+
+func spawnLevelUp(e *effects.Engine, ox, oy int, th theme) {
+	bx, by := boardInterior(ox, oy)
+	e.Flash(bx, by, game.Width*cellW, game.VisibleRows, th.pieces[game.S], 0.6)
+	e.Shake(1.2, 0.3)
+}
+
+var themes = []theme{neon, synthwave, monoglow}
+
+var synthwave = theme{
+	name:       "Synthwave",
+	background: render.RGB(20, 8, 34),
+	border:     render.RGB(120, 70, 160),
+	text:       render.RGB(245, 220, 250),
+	dim:        render.RGB(90, 55, 110),
+	empty:      render.RGB(34, 16, 52),
+	pieces: map[game.PieceType]render.Color{
+		game.I:       render.RGB(80, 230, 240),
+		game.O:       render.RGB(255, 200, 90),
+		game.T:       render.RGB(235, 90, 200),
+		game.S:       render.RGB(120, 240, 150),
+		game.Z:       render.RGB(255, 70, 130),
+		game.J:       render.RGB(120, 110, 255),
+		game.L:       render.RGB(255, 140, 90),
+		game.Garbage: render.RGB(110, 90, 130),
+	},
+}
+
+var monoglow = theme{
+	name:       "Mono-glow",
+	background: render.RGB(8, 14, 12),
+	border:     render.RGB(70, 120, 90),
+	text:       render.RGB(190, 245, 210),
+	dim:        render.RGB(45, 80, 60),
+	empty:      render.RGB(16, 26, 20),
+	pieces: map[game.PieceType]render.Color{
+		game.I:       render.RGB(120, 240, 170),
+		game.O:       render.RGB(170, 250, 150),
+		game.T:       render.RGB(90, 220, 140),
+		game.S:       render.RGB(140, 250, 180),
+		game.Z:       render.RGB(80, 200, 130),
+		game.J:       render.RGB(100, 230, 160),
+		game.L:       render.RGB(150, 245, 175),
+		game.Garbage: render.RGB(70, 110, 85),
+	},
 }
