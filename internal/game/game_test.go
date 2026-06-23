@@ -148,6 +148,31 @@ func TestTetrisScoringAndBackToBack(t *testing.T) {
 	}
 }
 
+func TestBonusFrenzyScalesSoftDrop(t *testing.T) {
+	g := NewGameAtLevel(1, 1)
+	g.ScoreScale = 2
+	if !g.SoftDrop() {
+		t.Fatal("soft drop on empty board should succeed")
+	}
+	if g.Score != 2 {
+		t.Fatalf("frenzy soft drop scored %d, want 2", g.Score)
+	}
+}
+
+func TestBonusFrenzyDoublesHardDrop(t *testing.T) {
+	plain := NewGameAtLevel(5, 1)
+	plain.HardDrop()
+	frenzy := NewGameAtLevel(5, 1)
+	frenzy.ScoreScale = 2
+	frenzy.HardDrop()
+	if plain.Score == 0 {
+		t.Fatal("hard drop should award distance points")
+	}
+	if frenzy.Score != plain.Score*2 {
+		t.Fatalf("frenzy hard drop = %d, want double of %d", frenzy.Score, plain.Score)
+	}
+}
+
 func TestComboCounter(t *testing.T) {
 	g := NewGameAtLevel(1, 1)
 	clearOne := func() {

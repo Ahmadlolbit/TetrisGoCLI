@@ -158,10 +158,17 @@ func (g *Game) Rotate(dir int) bool {
 
 func (g *Game) SoftDrop() bool {
 	if g.TryMove(0, 1) {
-		g.Score++
+		g.Score += g.scaleScore(1)
 		return true
 	}
 	return false
+}
+
+func (g *Game) scaleScore(n int) int {
+	if g.ScoreScale > 1 {
+		return int(float64(n) * g.ScoreScale)
+	}
+	return n
 }
 
 func (g *Game) HardDrop() LockResult {
@@ -170,7 +177,7 @@ func (g *Game) HardDrop() LockResult {
 		g.Current.Y++
 		dist++
 	}
-	g.Score += 2 * dist
+	g.Score += g.scaleScore(2 * dist)
 	return g.lockPiece()
 }
 
@@ -347,9 +354,7 @@ func (g *Game) scoreClear(cleared int, tspin TSpinType) LockResult {
 		g.Combo = 0
 	}
 
-	if g.ScoreScale > 1 {
-		gain = int(float64(gain) * g.ScoreScale)
-	}
+	gain = g.scaleScore(gain)
 	g.Score += gain
 	g.Lines += cleared
 	g.Level = g.startLevel + g.Lines/10
