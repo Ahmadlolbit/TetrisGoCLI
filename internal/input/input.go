@@ -20,6 +20,7 @@ const (
 	Restart
 	ThemeNext
 	ToggleChaos
+	Select
 	Quit
 )
 
@@ -62,6 +63,8 @@ func (r *Reader) parse(b []byte) {
 		switch b[i] {
 		case 3, 'q':
 			r.emit(Quit)
+		case '\r', '\n':
+			r.emit(Select)
 		case ' ':
 			r.emit(HardDrop)
 		case 'z', 'Z':

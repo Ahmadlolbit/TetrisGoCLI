@@ -19,6 +19,7 @@ const (
 
 type Engine struct {
 	Enabled   bool
+	FreqScale float64
 	meter     float64
 	pieces    int
 	active    Kind
@@ -31,7 +32,7 @@ type Engine struct {
 }
 
 func New(seed int64, enabled bool) *Engine {
-	return &Engine{Enabled: enabled, rng: rand.New(rand.NewSource(seed))}
+	return &Engine{Enabled: enabled, FreqScale: 1, rng: rand.New(rand.NewSource(seed))}
 }
 
 func (e *Engine) Toggle() {
@@ -122,7 +123,11 @@ func (e *Engine) Update(dt float64, g *game.Game) (Kind, bool) {
 		return None, false
 	}
 
-	e.meter += dt*(0.04+0.005*float64(g.Level)) + float64(e.pieces)*0.03
+	freq := e.FreqScale
+	if freq <= 0 {
+		freq = 1
+	}
+	e.meter += (dt*(0.04+0.005*float64(g.Level)) + float64(e.pieces)*0.03) * freq
 	e.pieces = 0
 	if e.meter < 1 {
 		return None, false
