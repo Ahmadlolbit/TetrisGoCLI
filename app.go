@@ -8,6 +8,7 @@ import (
 	"awesomeProject/internal/game"
 	"awesomeProject/internal/input"
 	"awesomeProject/internal/render"
+	"awesomeProject/internal/store"
 )
 
 type appScreen int
@@ -60,7 +61,7 @@ type app struct {
 }
 
 func newApp(scr *render.Screen, in *input.Reader) *app {
-	return &app{
+	a := &app{
 		scr:        scr,
 		in:         in,
 		board:      newScoreboard(),
@@ -68,6 +69,22 @@ func newApp(scr *render.Screen, in *input.Reader) *app {
 		startLevel: 1,
 		recentRank: -1,
 	}
+	a.loadState()
+	return a
+}
+
+func (a *app) loadState() {
+	st := store.Load()
+	a.themeIdx = wrap(st.Settings.Theme, len(themes))
+	a.startLevel = clampLevel(st.Settings.StartLevel)
+	a.board.load(st.Scores)
+}
+
+func (a *app) persist() {
+	store.Save(store.State{
+		Settings: store.Settings{Theme: a.themeIdx, StartLevel: a.startLevel},
+		Scores:   a.board.export(),
+	})
 }
 
 func newSession(m mode, seed int64, level int) *session {
@@ -83,6 +100,7 @@ func newSession(m mode, seed int64, level int) *session {
 }
 
 func (a *app) run(done <-chan struct{}) {
+	defer a.persist()
 	ticker := time.NewTicker(frameDelay)
 	defer ticker.Stop()
 	dt := frameDelay.Seconds()
@@ -223,6 +241,7 @@ func (a *app) recordScore() {
 	s.lastRank = a.board.record(s.mode, e)
 	a.recentKind = s.mode.kind
 	a.recentRank = s.lastRank
+	a.persist()
 }
 
 func (a *app) startGame(m mode) {
