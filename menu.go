@@ -8,6 +8,13 @@ import (
 	"awesomeProject/internal/render"
 )
 
+var (
+	menuItems     = []string{"Play", "Settings", "High Scores", "Quit"}
+	pauseItems    = []string{"Resume", "Restart", "Main Menu", "Quit"}
+	gameOverItems = []string{"Play Again", "Main Menu", "Quit"}
+	stripOrder    = []game.PieceType{game.I, game.O, game.T, game.S, game.Z, game.J, game.L}
+)
+
 func selStyle(active bool, anim float64, th theme) (render.Color, string) {
 	if active {
 		pulse := 0.5 + 0.5*math.Sin(anim*6)
@@ -79,10 +86,18 @@ func (a *app) drawHeader(b *render.Buffer, title string, th theme) {
 }
 
 func (a *app) drawPieceStrip(b *render.Buffer, x, y int, th theme) {
-	order := []game.PieceType{game.I, game.O, game.T, game.S, game.Z, game.J, game.L}
-	for i, t := range order {
+	for i, t := range stripOrder {
 		putBlock(b, x+i*2, y, th.pieces[t])
 	}
+}
+
+func (a *app) renderTooSmall(b *render.Buffer) {
+	th := themes[a.themeIdx]
+	b.Reset(th.background)
+	msg := fmt.Sprintf("Resize terminal to at least %dx%d", compositeW, compositeH+2)
+	cur := fmt.Sprintf("currently %dx%d", b.W, b.H)
+	b.Text((b.W-len(msg))/2, b.H/2, msg, th.pieces[game.Z], th.background)
+	b.Text((b.W-len(cur))/2, b.H/2+1, cur, th.dim, th.background)
 }
 
 func (a *app) renderMenu(b *render.Buffer) {
@@ -93,8 +108,7 @@ func (a *app) renderMenu(b *render.Buffer) {
 	title := "C H A O S   B L O C K S"
 	b.Text(cx-len(title)/2, cy-6, title, th.pieces[game.T], th.background)
 	a.drawPieceStrip(b, cx-7, cy-4, th)
-	items := []string{"Play", "Settings", "High Scores", "Quit"}
-	drawMenuItems(b, cx-7, cy-1, items, a.mainSel, a.anim, th, th.background)
+	drawMenuItems(b, cx-7, cy-1, menuItems, a.mainSel, a.anim, th, th.background)
 	hint := "↑/↓ move   ⏎ select   q quit"
 	b.Text(cx-len(hint)/2, b.H-2, hint, th.dim, th.background)
 }
@@ -205,7 +219,7 @@ func (a *app) renderPaused(b *render.Buffer) {
 	draw(b, s.g, s.ch, th, 0, 0)
 	a.drawPlayHUD(b, 0, 0, th)
 	dimOverlay(b, th)
-	a.drawCenterMenu(b, "PAUSED", []string{"Resume", "Restart", "Main Menu", "Quit"}, a.pauseSel, th)
+	a.drawCenterMenu(b, "PAUSED", pauseItems, a.pauseSel, th)
 	hint := "↑/↓ move   ⏎ select   esc resume"
 	b.Text((b.W-len(hint))/2, b.H-2, hint, th.dim, th.background)
 }
@@ -289,6 +303,5 @@ func (a *app) drawGameOverPanel(b *render.Buffer, th theme) {
 		badge := fmt.Sprintf("New #%d!", s.lastRank+1)
 		b.Text(x+(w-len(badge))/2, y+8, badge, th.pieces[game.O], bg)
 	}
-	items := []string{"Play Again", "Main Menu", "Quit"}
-	drawMenuItems(b, x+5, y+9, items, a.overSel, a.anim, th, bg)
+	drawMenuItems(b, x+5, y+9, gameOverItems, a.overSel, a.anim, th, bg)
 }

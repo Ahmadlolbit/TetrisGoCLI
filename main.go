@@ -45,7 +45,21 @@ func main() {
 		close(done)
 	}()
 
-	newApp(scr, in).run(done)
+	winch := make(chan os.Signal, 1)
+	signal.Notify(winch, syscall.SIGWINCH)
+	resize := make(chan [2]int, 1)
+	go func() {
+		for range winch {
+			cols, rows := termSize()
+			select {
+			case <-resize:
+			default:
+			}
+			resize <- [2]int{cols, rows}
+		}
+	}()
+
+	newApp(scr, in).run(done, resize)
 }
 
 func termSize() (int, int) {

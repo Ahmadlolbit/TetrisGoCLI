@@ -78,6 +78,15 @@ func (s *Screen) Back() *Buffer {
 	return s.back
 }
 
+func (s *Screen) Resize(w, h int) {
+	s.W = w
+	s.H = h
+	s.back = NewBuffer(w, h)
+	s.front = &Buffer{W: w, H: h, Cells: make([]Cell, w*h)}
+	fmt.Fprint(s.out, "\x1b[2J")
+	s.out.Flush()
+}
+
 func (s *Screen) Enter() {
 	fmt.Fprint(s.out, "\x1b[?1049h\x1b[?25l\x1b[2J")
 	s.out.Flush()
