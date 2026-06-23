@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"awesomeProject/internal/chaos"
 	"awesomeProject/internal/effects"
@@ -181,11 +182,11 @@ func drawLeftPanel(b *render.Buffer, g *game.Game, th theme, x, y int) {
 	stats := y + 6
 	drawBox(b, x, stats, 11, compositeH-6, "", th)
 	b.Text(x+2, stats+1, "SCORE", th.dim, th.background)
-	b.Text(x+2, stats+2, fmt.Sprintf("%d", g.Score), th.text, th.background)
+	b.Text(x+2, stats+2, strconv.Itoa(g.Score), th.text, th.background)
 	b.Text(x+2, stats+4, "LEVEL", th.dim, th.background)
-	b.Text(x+2, stats+5, fmt.Sprintf("%d", g.Level), th.text, th.background)
+	b.Text(x+2, stats+5, strconv.Itoa(g.Level), th.text, th.background)
 	b.Text(x+2, stats+7, "LINES", th.dim, th.background)
-	b.Text(x+2, stats+8, fmt.Sprintf("%d", g.Lines), th.text, th.background)
+	b.Text(x+2, stats+8, strconv.Itoa(g.Lines), th.text, th.background)
 }
 
 func drawRightPanel(b *render.Buffer, g *game.Game, ch *chaos.Engine, th theme, x, y int) {

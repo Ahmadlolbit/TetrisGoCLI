@@ -58,6 +58,8 @@ type app struct {
 	recentKind modeKind
 	recentRank int
 
+	tooSmall bool
+
 	sess *session
 }
 
@@ -100,29 +102,54 @@ func newSession(m mode, seed int64, level int) *session {
 	}
 }
 
-func (a *app) run(done <-chan struct{}) {
+func (a *app) run(done <-chan struct{}, resize <-chan [2]int) {
 	defer a.persist()
 	ticker := time.NewTicker(frameDelay)
 	defer ticker.Stop()
 	dt := frameDelay.Seconds()
+	frame := 0
+
+	a.render()
+	a.scr.Flush()
 
 	for {
 		select {
 		case <-done:
 			return
+		case sz := <-resize:
+			a.onResize(sz[0], sz[1])
+			a.render()
+			a.scr.Flush()
 		case ev := <-a.in.Events():
 			if !a.handle(ev) {
 				return
 			}
-		case <-ticker.C:
-			a.update(dt)
 			a.render()
 			a.scr.Flush()
+		case <-ticker.C:
+			frame++
+			a.update(dt)
+			if a.animating() || frame%3 == 0 {
+				a.render()
+				a.scr.Flush()
+			}
 		}
 	}
 }
 
+func (a *app) animating() bool {
+	return !a.tooSmall && (a.state == scrPlaying || a.state == scrGameOver)
+}
+
+func (a *app) onResize(cols, rows int) {
+	a.scr.Resize(cols, rows)
+	a.tooSmall = cols < compositeW || rows < compositeH+2
+}
+
 func (a *app) update(dt float64) {
+	if a.tooSmall {
+		return
+	}
 	a.anim += dt
 	switch a.state {
 	case scrPlaying:
@@ -136,6 +163,10 @@ func (a *app) update(dt float64) {
 }
 
 func (a *app) render() {
+	if a.tooSmall {
+		a.renderTooSmall(a.scr.Back())
+		return
+	}
 	switch a.state {
 	case scrMenu:
 		a.renderMenu(a.scr.Back())
@@ -283,6 +314,9 @@ func (a *app) handle(ev input.Event) bool {
 	if ev == input.Quit {
 		return false
 	}
+	if a.tooSmall {
+		return true
+	}
 	if ev == input.ThemeNext {
 		a.themeIdx = wrap(a.themeIdx+1, len(themes))
 		return true
@@ -309,9 +343,9 @@ func (a *app) handle(ev input.Event) bool {
 func (a *app) handleMenu(ev input.Event) bool {
 	switch {
 	case isUp(ev):
-		a.mainSel = wrap(a.mainSel-1, 4)
+		a.mainSel = wrap(a.mainSel-1, len(menuItems))
 	case isDown(ev):
-		a.mainSel = wrap(a.mainSel+1, 4)
+		a.mainSel = wrap(a.mainSel+1, len(menuItems))
 	case isConfirm(ev):
 		switch a.mainSel {
 		case 0:
@@ -408,9 +442,9 @@ func (a *app) handlePlaying(ev input.Event) bool {
 func (a *app) handlePaused(ev input.Event) bool {
 	switch {
 	case isUp(ev):
-		a.pauseSel = wrap(a.pauseSel-1, 4)
+		a.pauseSel = wrap(a.pauseSel-1, len(pauseItems))
 	case isDown(ev):
-		a.pauseSel = wrap(a.pauseSel+1, 4)
+		a.pauseSel = wrap(a.pauseSel+1, len(pauseItems))
 	case ev == input.Restart:
 		a.restart()
 	case isBack(ev):
@@ -440,9 +474,9 @@ func (a *app) handleGameOver(ev input.Event) bool {
 	}
 	switch {
 	case isUp(ev):
-		a.overSel = wrap(a.overSel-1, 3)
+		a.overSel = wrap(a.overSel-1, len(gameOverItems))
 	case isDown(ev):
-		a.overSel = wrap(a.overSel+1, 3)
+		a.overSel = wrap(a.overSel+1, len(gameOverItems))
 	case ev == input.Restart:
 		a.restart()
 	case isConfirm(ev):
