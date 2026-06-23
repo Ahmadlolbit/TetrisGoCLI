@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"awesomeProject/internal/store"
+)
 
 const maxScoresPerMode = 8
 
@@ -44,6 +48,30 @@ func (s *scoreboard) record(m mode, e scoreEntry) int {
 		return -1
 	}
 	return pos
+}
+
+func (s *scoreboard) export() map[string][]store.Entry {
+	out := make(map[string][]store.Entry)
+	for _, m := range modes {
+		list := s.tables[m.kind]
+		if len(list) == 0 {
+			continue
+		}
+		es := make([]store.Entry, len(list))
+		for i, e := range list {
+			es[i] = store.Entry{Score: e.score, Level: e.level, Lines: e.lines, Combo: e.combo, Time: e.time}
+		}
+		out[m.slug] = es
+	}
+	return out
+}
+
+func (s *scoreboard) load(scores map[string][]store.Entry) {
+	for _, m := range modes {
+		for _, e := range scores[m.slug] {
+			s.record(m, scoreEntry{score: e.Score, level: e.Level, lines: e.Lines, combo: e.Combo, time: e.Time})
+		}
+	}
 }
 
 func (e scoreEntry) beats(o scoreEntry, byTime bool) bool {

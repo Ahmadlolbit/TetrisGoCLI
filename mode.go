@@ -12,6 +12,7 @@ const (
 type mode struct {
 	kind         modeKind
 	name         string
+	slug         string
 	tagline      string
 	chaosEnabled bool
 	chaosFreq    float64
@@ -20,10 +21,10 @@ type mode struct {
 }
 
 var modes = []mode{
-	{modeMarathon, "Marathon", "Endless climb through the levels", false, 1, 1, 0},
-	{modeSprint, "Sprint", "Clear 40 lines, race the clock", false, 1, 1, 40},
-	{modeChaos, "Chaos", "Signature mode, events in overdrive", true, 1.7, 1, 0},
-	{modeClassic, "Classic", "Chaos off, gentler gravity", false, 1, 0.7, 0},
+	{modeMarathon, "Marathon", "marathon", "Endless climb through the levels", false, 1, 1, 0},
+	{modeSprint, "Sprint", "sprint", "Clear 40 lines, race the clock", false, 1, 1, 40},
+	{modeChaos, "Chaos", "chaos", "Signature mode, events in overdrive", true, 1.7, 1, 0},
+	{modeClassic, "Classic", "classic", "Chaos off, gentler gravity", false, 1, 0.7, 0},
 }
 
 func (m mode) timed() bool {
