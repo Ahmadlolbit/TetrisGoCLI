@@ -24,16 +24,17 @@ const (
 )
 
 type session struct {
-	g        *game.Game
-	eng      *effects.Engine
-	ch       *chaos.Engine
-	mode     mode
-	elapsed  float64
-	maxCombo int
-	collapse float64
-	won      bool
-	recorded bool
-	lastRank int
+	g         *game.Game
+	eng       *effects.Engine
+	ch        *chaos.Engine
+	mode      mode
+	elapsed   float64
+	maxCombo  int
+	prevCombo int
+	collapse  float64
+	won       bool
+	recorded  bool
+	lastRank  int
 }
 
 type app struct {
@@ -167,6 +168,7 @@ func (a *app) updatePlaying(dt float64) {
 		spawnLockEffects(s.eng, res, ox, oy, th)
 		s.ch.OnPiece()
 		s.observe(res)
+		a.comboFeedback(res, ox, oy, th)
 	}
 	if s.g.Level > before {
 		spawnLevelUp(s.eng, ox, oy, th)
@@ -205,6 +207,19 @@ func (s *session) observe(res game.LockResult) {
 	if res.Combo > s.maxCombo {
 		s.maxCombo = res.Combo
 	}
+}
+
+func (a *app) comboFeedback(res game.LockResult, ox, oy int, th theme) {
+	s := a.sess
+	if s.prevCombo >= 2 && res.Combo == 0 {
+		bx := ox + boardOffset + game.Width*cellW + 5
+		by := oy + 16
+		s.eng.Flash(bx, by, 8, 1, th.pieces[game.Z], 0.3)
+		for i := 0; i < 8; i++ {
+			s.eng.Burst(float64(bx+i), float64(by), th.dim, 1, 4)
+		}
+	}
+	s.prevCombo = res.Combo
 }
 
 func (a *app) checkEnd() {
@@ -464,6 +479,7 @@ func (a *app) applyGame(ev input.Event) {
 		spawnLockEffects(s.eng, res, ox, oy, th)
 		s.ch.OnPiece()
 		s.observe(res)
+		a.comboFeedback(res, ox, oy, th)
 		if s.g.Level > before {
 			spawnLevelUp(s.eng, ox, oy, th)
 		}

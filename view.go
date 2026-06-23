@@ -205,13 +205,32 @@ func drawRightPanel(b *render.Buffer, g *game.Game, ch *chaos.Engine, th theme, 
 	} else {
 		b.Text(x+2, info+1, "COMBO -", th.dim, th.background)
 	}
+	drawComboMeter(b, g.Combo, th, x+2, info+2)
 	if g.BackToBack {
 		b.Text(x+2, info+3, "BACK2BACK", th.pieces[game.I], th.background)
 	} else {
 		b.Text(x+2, info+3, "B2B -", th.dim, th.background)
 	}
 
-	drawChaosMeter(b, ch, th, x+2, info+5)
+	drawChaosMeter(b, ch, th, x+2, info+4)
+}
+
+func drawComboMeter(b *render.Buffer, combo int, th theme, x, y int) {
+	count := combo - 1
+	if count < 0 {
+		count = 0
+	}
+	barW := 8
+	if count > barW {
+		count = barW
+	}
+	for i := 0; i < barW; i++ {
+		col := th.dim
+		if i < count {
+			col = render.Lerp(th.pieces[game.I], th.pieces[game.Z], float64(i)/float64(barW-1))
+		}
+		b.Set(x+i, y, render.Cell{Ch: '▮', FG: col, BG: th.background})
+	}
 }
 
 func drawChaosMeter(b *render.Buffer, ch *chaos.Engine, th theme, x, y int) {
