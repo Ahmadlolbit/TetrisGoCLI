@@ -27,6 +27,9 @@ type State struct {
 }
 
 func dir() string {
+	if d := os.Getenv("CHAOSBLOCKS_CONFIG_DIR"); d != "" {
+		return d
+	}
 	base, err := os.UserConfigDir()
 	if err != nil {
 		base = filepath.Join(os.TempDir(), "chaosblocks-config")

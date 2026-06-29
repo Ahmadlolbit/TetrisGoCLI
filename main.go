@@ -16,10 +16,6 @@ const frameDelay = 16 * time.Millisecond
 
 func main() {
 	cols, rows := termSize()
-	if cols < compositeW || rows < compositeH+2 {
-		fmt.Printf("Terminal too small. Need at least %dx%d, got %dx%d.\n", compositeW, compositeH+2, cols, rows)
-		os.Exit(1)
-	}
 
 	in, restore := input.Start()
 	scr := render.NewScreen(cols, rows)

@@ -196,6 +196,31 @@ func (g *Game) Hold() bool {
 	return true
 }
 
+func (g *Game) AddGarbage(rows, gap int) {
+	headroom := g.stackTop() - VisibleTop
+	if rows > headroom {
+		rows = headroom
+	}
+	if rows <= 0 {
+		return
+	}
+	g.Board.AddGarbage(rows, gap)
+	g.Current.Y -= rows
+	g.gravityAccum = 0
+	g.lockTimer = 0
+}
+
+func (g *Game) stackTop() int {
+	for y := 0; y < Height; y++ {
+		for x := 0; x < Width; x++ {
+			if g.Board.At(x, y) != Empty {
+				return y
+			}
+		}
+	}
+	return Height
+}
+
 func (g *Game) Tick(dt float64) []LockResult {
 	if g.Over {
 		return nil

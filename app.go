@@ -34,17 +34,18 @@ const (
 )
 
 type session struct {
-	g         *game.Game
-	eng       *effects.Engine
-	ch        *chaos.Engine
-	mode      mode
-	elapsed   float64
-	maxCombo  int
-	prevCombo int
-	collapse  float64
-	won       bool
-	recorded  bool
-	lastRank  int
+	g            *game.Game
+	eng          *effects.Engine
+	ch           *chaos.Engine
+	mode         mode
+	elapsed      float64
+	maxCombo     int
+	prevCombo    int
+	collapse     float64
+	won          bool
+	recorded     bool
+	chaosToggled bool
+	lastRank     int
 }
 
 type app struct {
@@ -89,6 +90,7 @@ func newApp(scr *render.Screen, in *input.Reader) *app {
 		startLevel: 1,
 		recentRank: -1,
 	}
+	a.tooSmall = scr.W < compositeW || scr.H < compositeH+2
 	a.loadState()
 	return a
 }
@@ -302,6 +304,9 @@ func (a *app) recordScore() {
 		return
 	}
 	s.recorded = true
+	if s.chaosToggled {
+		return
+	}
 	if s.mode.timed() && !s.won {
 		return
 	}
@@ -532,6 +537,7 @@ func (a *app) handlePlaying(ev input.Event) bool {
 		a.state = scrPaused
 	case input.ToggleChaos:
 		a.sess.ch.Toggle()
+		a.sess.chaosToggled = true
 	case input.Restart:
 		a.restart()
 	case input.MoveLeft, input.MoveRight, input.SoftDrop, input.HardDrop,

@@ -132,6 +132,52 @@ func TestCaptureIgnoresControlBytes(t *testing.T) {
 	r.EndCapture()
 }
 
+func TestParseSplitEscapeSequence(t *testing.T) {
+	r := &Reader{events: make(chan Event, 16), captures: make(chan Key, 16)}
+	r.SetKeymap(DefaultKeymap())
+	r.pending = append([]byte(nil), r.parse([]byte{0x1b, '['})...)
+	select {
+	case e := <-r.Events():
+		t.Fatalf("incomplete escape should not emit, got %v", e)
+	default:
+	}
+	if len(r.pending) != 2 {
+		t.Fatalf("incomplete escape should be carried over, pending=%v", r.pending)
+	}
+	data := append(r.pending, 'C')
+	r.pending = append([]byte(nil), r.parse(data)...)
+	if got := <-r.Events(); got != MoveRight {
+		t.Fatalf("split arrow should resolve to MoveRight, got %v", got)
+	}
+}
+
+func TestParseModifiedArrowConsumed(t *testing.T) {
+	r := &Reader{events: make(chan Event, 16), captures: make(chan Key, 16)}
+	r.SetKeymap(DefaultKeymap())
+	if leftover := r.parse([]byte{0x1b, '[', '1', ';', '5', 'A'}); leftover != nil {
+		t.Fatalf("complete CSI should leave no leftover, got %v", leftover)
+	}
+	select {
+	case e := <-r.Events():
+		t.Fatalf("modified arrow should emit nothing, got %v", e)
+	default:
+	}
+}
+
+func TestImportKeymapNeverLeavesActionUnbound(t *testing.T) {
+	m := ImportKeymap(map[string]string{"hold": "x"})
+	seen := map[Key]bool{}
+	for _, e := range Bindable {
+		if m[e] == "" {
+			t.Fatalf("action %v left unbound", e)
+		}
+		if seen[m[e]] {
+			t.Fatalf("duplicate key %q across actions", m[e])
+		}
+		seen[m[e]] = true
+	}
+}
+
 func TestReaderDispatchAndCapture(t *testing.T) {
 	r := &Reader{events: make(chan Event, 16), captures: make(chan Key, 16)}
 	r.SetKeymap(DefaultKeymap())

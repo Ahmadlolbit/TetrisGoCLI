@@ -83,7 +83,7 @@ Settings (theme, starting level, color mode, key bindings) and per-mode high
 scores are saved to your user config directory, e.g.
 `~/.config/chaosblocks/state.json`. The file is human-readable JSON and
 corruption-tolerant — a missing or malformed file falls back to sane defaults
-rather than crashing.
+rather than crashing. Set `CHAOSBLOCKS_CONFIG_DIR` to override the location.
 
 ## Development
 

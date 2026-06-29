@@ -7,7 +7,7 @@ import (
 )
 
 func TestSaveLoadRoundTrip(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("CHAOSBLOCKS_CONFIG_DIR", t.TempDir())
 	in := State{
 		Settings: Settings{Theme: 2, StartLevel: 7},
 		Scores: map[string][]Entry{
@@ -31,7 +31,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 }
 
 func TestLoadMissingReturnsDefaults(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("CHAOSBLOCKS_CONFIG_DIR", t.TempDir())
 	s := Load()
 	if s.Scores == nil || len(s.Scores) != 0 {
 		t.Fatalf("missing file should yield empty scores, got %+v", s.Scores)
@@ -42,7 +42,7 @@ func TestLoadMissingReturnsDefaults(t *testing.T) {
 }
 
 func TestLoadCorruptReturnsDefaults(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("CHAOSBLOCKS_CONFIG_DIR", t.TempDir())
 	if err := os.MkdirAll(filepath.Dir(Path()), 0o755); err != nil {
 		t.Fatal(err)
 	}
