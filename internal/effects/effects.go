@@ -113,7 +113,7 @@ func (e *Engine) Burst(x, y float64, col render.Color, n int, spread float64) {
 	for i := 0; i < n; i++ {
 		ang := e.rng.Float64() * 2 * math.Pi
 		spd := (0.4 + e.rng.Float64()) * spread
-		life := 0.3 + e.rng.Float64()*0.5
+		life := 0.25 + e.rng.Float64()*0.35
 		e.particles = append(e.particles, particle{
 			x:     x,
 			y:     y,

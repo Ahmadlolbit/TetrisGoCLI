@@ -50,10 +50,21 @@ func block(col render.Color) render.Cell {
 	return render.Cell{Ch: '█', FG: col, BG: col}
 }
 
-func putBlock(b *render.Buffer, x, y int, col render.Color) {
+var pieceGlyph = map[game.PieceType]rune{
+	game.I:       '█',
+	game.O:       '▓',
+	game.T:       '▒',
+	game.S:       '░',
+	game.Z:       '▚',
+	game.J:       '▞',
+	game.L:       '╳',
+	game.Garbage: '▒',
+}
+
+func putBlock(b *render.Buffer, x, y int, col render.Color, glyph rune) {
 	top := render.Lerp(col, render.RGB(255, 255, 255), 0.18)
-	b.Set(x, y, render.Cell{Ch: '▀', FG: top, BG: col})
-	b.Set(x+1, y, render.Cell{Ch: '▀', FG: top, BG: col})
+	b.Set(x, y, render.Cell{Ch: glyph, FG: top, BG: col})
+	b.Set(x+1, y, render.Cell{Ch: glyph, FG: top, BG: col})
 }
 
 func cellOf(r rune, fg, bg render.Color) render.Cell {
@@ -84,7 +95,7 @@ func drawMini(b *render.Buffer, x, y int, t game.PieceType, th theme) {
 	}
 	p := game.Piece{Type: t, Rotation: 0, X: 0, Y: 0}
 	for _, c := range p.Cells() {
-		putBlock(b, x+c.X*cellW, y+c.Y, th.pieces[t])
+		putBlock(b, x+c.X*cellW, y+c.Y, th.pieces[t], pieceGlyph[t])
 	}
 }
 
@@ -146,11 +157,12 @@ func drawPlayfield(b *render.Buffer, g *game.Game, ch *chaos.Engine, th theme, x
 				b.Set(px, py, cellOf('·', th.dim, empty))
 				b.Set(px+1, py, cellOf(' ', th.dim, empty))
 			} else {
-				col := pieceColor(th, ch, c)
+				rt := ch.Remap(c)
+				col := th.pieces[rt]
 				if dimmed {
 					col = render.Lerp(col, th.background, 0.72)
 				}
-				putBlock(b, px, py, col)
+				putBlock(b, px, py, col, pieceGlyph[rt])
 			}
 		}
 	}
@@ -167,11 +179,13 @@ func drawPlayfield(b *render.Buffer, g *game.Game, ch *chaos.Engine, th theme, x
 		b.Set(px+1, py, cellOf('▒', ghostCol, th.empty))
 	}
 
+	rt := ch.Remap(g.Current.Type)
+	cur := th.pieces[rt]
 	for _, c := range g.Current.Cells() {
 		if c.Y < game.VisibleTop {
 			continue
 		}
-		putBlock(b, bx+c.X*cellW, by+(c.Y-game.VisibleTop), pieceColor(th, ch, g.Current.Type))
+		putBlock(b, bx+c.X*cellW, by+(c.Y-game.VisibleTop), cur, pieceGlyph[rt])
 	}
 }
 
@@ -276,27 +290,27 @@ func spawnLockEffects(e *effects.Engine, res game.LockResult, ox, oy int, th the
 	w := game.Width * cellW
 	for _, gy := range res.ClearedRows {
 		py := by + (gy - game.VisibleTop)
-		e.Flash(bx, py, w, 1, render.RGB(255, 255, 255), 0.35)
+		e.Flash(bx, py, w, 1, render.RGB(255, 255, 255), 0.22)
 		for gx := 0; gx < game.Width; gx++ {
 			e.Burst(float64(bx+gx*cellW), float64(py), th.text, 2, 6)
 		}
 	}
 	switch {
 	case res.TSpin != game.TSpinNone && res.Lines > 0:
-		e.Flash(bx, by, w, game.VisibleRows, th.pieces[game.T], 0.4)
-		e.Shake(1.6, 0.35)
+		e.Flash(bx, by, w, game.VisibleRows, th.pieces[game.T], 0.28)
+		e.Shake(1.6, 0.25)
 	case res.Lines >= 4:
-		e.Flash(bx, by, w, game.VisibleRows, th.pieces[game.I], 0.4)
-		e.Shake(1.9, 0.4)
+		e.Flash(bx, by, w, game.VisibleRows, th.pieces[game.I], 0.28)
+		e.Shake(1.9, 0.28)
 	case res.Lines > 0:
-		e.Shake(0.5+float64(res.Lines)*0.25, 0.18)
+		e.Shake(0.5+float64(res.Lines)*0.25, 0.14)
 	}
 	if res.Combo > 2 {
 		mag := float64(res.Combo-1) * 0.2
 		if mag > 1.4 {
 			mag = 1.4
 		}
-		e.Shake(mag, 0.16)
+		e.Shake(mag, 0.12)
 	}
 }
 
@@ -308,13 +322,13 @@ func spawnHardDrop(e *effects.Engine, landing game.Piece, ox, oy int, th theme) 
 		}
 		e.Burst(float64(bx+c.X*cellW), float64(by+(c.Y-game.VisibleTop)), th.pieces[landing.Type], 3, 5)
 	}
-	e.Shake(0.7, 0.12)
+	e.Shake(0.7, 0.10)
 }
 
 func spawnLevelUp(e *effects.Engine, ox, oy int, th theme) {
 	bx, by := boardInterior(ox, oy)
-	e.Flash(bx, by, game.Width*cellW, game.VisibleRows, th.pieces[game.S], 0.6)
-	e.Shake(1.2, 0.3)
+	e.Flash(bx, by, game.Width*cellW, game.VisibleRows, th.pieces[game.S], 0.4)
+	e.Shake(1.2, 0.22)
 }
 
 func spawnChaos(e *effects.Engine, k chaos.Kind, ox, oy int, th theme) {
@@ -324,8 +338,8 @@ func spawnChaos(e *effects.Engine, k chaos.Kind, ox, oy int, th theme) {
 	if k == chaos.BonusFrenzy {
 		col = th.pieces[game.O]
 	}
-	e.Flash(bx, by, w, game.VisibleRows, col, 0.7)
-	e.Shake(1.5, 0.35)
+	e.Flash(bx, by, w, game.VisibleRows, col, 0.5)
+	e.Shake(1.5, 0.28)
 	for gx := 0; gx < game.Width; gx++ {
 		e.Burst(float64(bx+gx*cellW), float64(by), col, 2, 7)
 	}

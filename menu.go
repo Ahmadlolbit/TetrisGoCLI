@@ -93,7 +93,7 @@ func (a *app) drawHeader(b *render.Buffer, title string, th theme) {
 
 func (a *app) drawPieceStrip(b *render.Buffer, x, y int, th theme) {
 	for i, t := range stripOrder {
-		putBlock(b, x+i*2, y, th.pieces[t])
+		putBlock(b, x+i*2, y, th.pieces[t], pieceGlyph[t])
 	}
 }
 
@@ -310,7 +310,7 @@ func (a *app) drawCollapseBoard(b *render.Buffer, s *session, x, y int, th theme
 				b.Set(px, py, cellOf('·', th.dim, th.empty))
 				b.Set(px+1, py, cellOf(' ', th.dim, th.empty))
 			} else {
-				putBlock(b, px, py, th.pieces[c])
+				putBlock(b, px, py, th.pieces[c], pieceGlyph[c])
 			}
 		}
 	}

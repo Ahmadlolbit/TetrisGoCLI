@@ -8,7 +8,7 @@ const (
 	spawnY       = 2
 	previewCount = 5
 
-	lockDelaySeconds = 0.5
+	lockDelaySeconds = 0.3
 	maxLockResets    = 15
 )
 
