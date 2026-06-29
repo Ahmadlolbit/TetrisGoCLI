@@ -180,6 +180,17 @@ func ImportKeymap(p map[string]string) Keymap {
 			assign(e, def[e])
 		}
 	}
+	for _, e := range Bindable {
+		if _, ok := m[e]; ok {
+			continue
+		}
+		for _, alt := range Bindable {
+			if !used[def[alt]] {
+				assign(e, def[alt])
+				break
+			}
+		}
+	}
 	return m
 }
 
@@ -189,6 +200,7 @@ type Reader struct {
 	mu        sync.RWMutex
 	lookup    map[Key]Event
 	capturing bool
+	pending   []byte
 }
 
 func (r *Reader) Events() <-chan Event {
@@ -244,32 +256,50 @@ func (r *Reader) loop() {
 		if err != nil {
 			return
 		}
-		r.parse(buf[:n])
+		data := buf[:n]
+		if len(r.pending) > 0 {
+			data = append(r.pending, data...)
+		}
+		r.pending = append([]byte(nil), r.parse(data)...)
 	}
 }
 
-func (r *Reader) parse(b []byte) {
-	for i := 0; i < len(b); i++ {
-		if b[i] == 0x1b {
-			if i+2 < len(b) && b[i+1] == '[' {
-				switch b[i+2] {
-				case 'A':
-					r.dispatch("up")
-				case 'B':
-					r.dispatch("down")
-				case 'C':
-					r.dispatch("right")
-				case 'D':
-					r.dispatch("left")
+func (r *Reader) parse(b []byte) []byte {
+	i := 0
+	for i < len(b) {
+		c := b[i]
+		if c == 0x1b {
+			if i+1 < len(b) && b[i+1] == '[' {
+				j := i + 2
+				for j < len(b) && (b[j] < 0x40 || b[j] > 0x7e) {
+					j++
 				}
-				i += 2
-			} else {
-				r.dispatch("esc")
+				if j >= len(b) {
+					return b[i:]
+				}
+				if j == i+2 {
+					switch b[j] {
+					case 'A':
+						r.dispatch("up")
+					case 'B':
+						r.dispatch("down")
+					case 'C':
+						r.dispatch("right")
+					case 'D':
+						r.dispatch("left")
+					}
+				}
+				i = j + 1
+				continue
 			}
+			r.dispatch("esc")
+			i++
 			continue
 		}
-		r.dispatch(tokenize(b[i]))
+		r.dispatch(tokenize(c))
+		i++
 	}
+	return nil
 }
 
 func tokenize(c byte) Key {

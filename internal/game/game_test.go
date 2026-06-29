@@ -173,6 +173,45 @@ func TestBonusFrenzyDoublesHardDrop(t *testing.T) {
 	}
 }
 
+func TestAddGarbageLiftsPieceAndNeverTopsOut(t *testing.T) {
+	g := NewGameAtLevel(1, 1)
+	for y := VisibleTop + 1; y < Height; y++ {
+		for x := 0; x < Width; x++ {
+			g.Board.Set(x, y, Garbage)
+		}
+	}
+	g.Current = Piece{Type: I, Rotation: 0, X: spawnX, Y: spawnY}
+	beforeY := g.Current.Y
+	g.AddGarbage(2, 3)
+	if g.Over {
+		t.Fatal("garbage surge must never top out the player")
+	}
+	if g.Current.Y != beforeY-1 {
+		t.Fatalf("piece should lift by the rows added (1), got %d want %d", g.Current.Y, beforeY-1)
+	}
+	if top := g.stackTop(); top < VisibleTop {
+		t.Fatalf("garbage pushed the stack into the hidden buffer, top=%d", top)
+	}
+}
+
+func TestAddGarbageSkippedWhenNoHeadroom(t *testing.T) {
+	g := NewGameAtLevel(1, 1)
+	for y := VisibleTop; y < Height; y++ {
+		for x := 0; x < Width; x++ {
+			g.Board.Set(x, y, Garbage)
+		}
+	}
+	g.Current = Piece{Type: I, Rotation: 0, X: spawnX, Y: spawnY}
+	beforeY := g.Current.Y
+	g.AddGarbage(2, 3)
+	if g.Current.Y != beforeY {
+		t.Fatalf("no garbage should be added without headroom; Y moved %d->%d", beforeY, g.Current.Y)
+	}
+	if g.Over {
+		t.Fatal("must not top out")
+	}
+}
+
 func TestComboCounter(t *testing.T) {
 	g := NewGameAtLevel(1, 1)
 	clearOne := func() {

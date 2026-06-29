@@ -142,7 +142,7 @@ func (e *Engine) Update(dt float64, g *game.Game) (Kind, bool) {
 	case GarbageSurge:
 		rows := 1 + e.rng.Intn(2)
 		gap := e.rng.Intn(game.Width)
-		g.Board.AddGarbage(rows, gap)
+		g.AddGarbage(rows, gap)
 		e.cooldown = 5
 	case ColorScramble:
 		e.buildRemap()
