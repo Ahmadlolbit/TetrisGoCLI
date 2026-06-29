@@ -17,6 +17,7 @@ const (
 	scrMenu appScreen = iota
 	scrModeSelect
 	scrSettings
+	scrKeybinds
 	scrScores
 	scrPlaying
 	scrPaused
@@ -27,6 +28,7 @@ const (
 	setTheme = iota
 	setStartLevel
 	setColorMode
+	setKeybinds
 	setBack
 	settingsRows
 )
@@ -64,6 +66,12 @@ type app struct {
 	pauseSel   int
 	overSel    int
 
+	keymap        input.Keymap
+	bindSel       int
+	capturing     bool
+	captureAction input.Event
+	bindMsg       string
+
 	recentKind modeKind
 	recentRank int
 
@@ -91,6 +99,8 @@ func (a *app) loadState() {
 	a.startLevel = clampLevel(st.Settings.StartLevel)
 	a.colorMode = clampColorMode(st.Settings.ColorMode)
 	a.scr.SetColorMode(resolveColorMode(a.colorMode))
+	a.keymap = input.ImportKeymap(st.Keymap)
+	a.in.SetKeymap(a.keymap)
 	a.board.load(st.Scores)
 }
 
@@ -98,6 +108,7 @@ func (a *app) persist() {
 	store.Save(store.State{
 		Settings: store.Settings{Theme: a.themeIdx, StartLevel: a.startLevel, ColorMode: a.colorMode},
 		Scores:   a.board.export(),
+		Keymap:   input.ExportKeymap(a.keymap),
 	})
 }
 
@@ -135,6 +146,10 @@ func (a *app) run(done <-chan struct{}, resize <-chan [2]int) {
 			if !a.handle(ev) {
 				return
 			}
+			a.render()
+			a.scr.Flush()
+		case k := <-a.in.Captures():
+			a.onCapture(k)
 			a.render()
 			a.scr.Flush()
 		case <-ticker.C:
@@ -185,6 +200,8 @@ func (a *app) render() {
 		a.renderModeSelect(a.scr.Back())
 	case scrSettings:
 		a.renderSettings(a.scr.Back())
+	case scrKeybinds:
+		a.renderKeybinds(a.scr.Back())
 	case scrScores:
 		a.renderScores(a.scr.Back())
 	case scrPlaying:
@@ -339,6 +356,8 @@ func (a *app) handle(ev input.Event) bool {
 		return a.handleModeSelect(ev)
 	case scrSettings:
 		return a.handleSettings(ev)
+	case scrKeybinds:
+		return a.handleKeybinds(ev)
 	case scrScores:
 		return a.handleScores(ev)
 	case scrPlaying:
@@ -401,15 +420,85 @@ func (a *app) handleSettings(ev input.Event) bool {
 	case isRight(ev):
 		a.adjustSetting(1)
 	case isConfirm(ev):
-		if a.settingSel == setBack {
+		switch a.settingSel {
+		case setBack:
 			a.state = scrMenu
-		} else {
+		case setKeybinds:
+			a.openKeybinds()
+		default:
 			a.adjustSetting(1)
 		}
 	case isBack(ev):
 		a.state = scrMenu
 	}
 	return true
+}
+
+func (a *app) openKeybinds() {
+	a.bindSel = 0
+	a.bindMsg = ""
+	a.capturing = false
+	a.state = scrKeybinds
+}
+
+func (a *app) handleKeybinds(ev input.Event) bool {
+	n := len(input.Bindable) + 2
+	resetIdx := len(input.Bindable)
+	switch {
+	case isUp(ev):
+		a.bindSel = wrap(a.bindSel-1, n)
+		a.bindMsg = ""
+	case isDown(ev):
+		a.bindSel = wrap(a.bindSel+1, n)
+		a.bindMsg = ""
+	case isConfirm(ev):
+		switch a.bindSel {
+		case resetIdx:
+			a.keymap = input.DefaultKeymap()
+			a.in.SetKeymap(a.keymap)
+			a.persist()
+			a.bindMsg = "reset to defaults"
+		case resetIdx + 1:
+			a.state = scrSettings
+		default:
+			a.captureAction = input.Bindable[a.bindSel]
+			a.capturing = true
+			a.bindMsg = ""
+			a.in.BeginCapture()
+		}
+	case isBack(ev):
+		a.state = scrSettings
+	}
+	return true
+}
+
+func (a *app) onCapture(k input.Key) {
+	if !a.capturing {
+		return
+	}
+	a.capturing = false
+	a.in.EndCapture()
+	switch {
+	case k == "esc":
+		a.bindMsg = "cancelled"
+	case input.Reserved(k):
+		a.bindMsg = input.KeyLabel(k) + " is reserved"
+	default:
+		a.rebind(a.captureAction, k)
+		a.in.SetKeymap(a.keymap)
+		a.persist()
+		a.bindMsg = input.Label(a.captureAction) + " = " + input.KeyLabel(k)
+	}
+}
+
+func (a *app) rebind(action input.Event, k input.Key) {
+	old := a.keymap[action]
+	for e, ek := range a.keymap {
+		if e != action && ek == k {
+			a.keymap[e] = old
+		}
+	}
+	a.keymap[action] = k
 }
 
 func (a *app) adjustSetting(d int) {

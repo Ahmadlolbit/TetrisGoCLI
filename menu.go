@@ -3,10 +3,16 @@ package main
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"awesomeProject/internal/game"
+	"awesomeProject/internal/input"
 	"awesomeProject/internal/render"
 )
+
+func (a *app) quitKeyHint() string {
+	return strings.ToLower(input.KeyLabel(a.keymap[input.Quit]))
+}
 
 var (
 	menuItems     = []string{"Play", "Settings", "High Scores", "Quit"}
@@ -109,7 +115,7 @@ func (a *app) renderMenu(b *render.Buffer) {
 	b.Text(cx-len(title)/2, cy-6, title, th.pieces[game.T], th.background)
 	a.drawPieceStrip(b, cx-7, cy-4, th)
 	drawMenuItems(b, cx-7, cy-1, menuItems, a.mainSel, a.anim, th, th.background)
-	hint := "↑/↓ move   ⏎ select   q quit"
+	hint := "↑/↓ move   ⏎ select   " + a.quitKeyHint() + " quit"
 	b.Text(cx-len(hint)/2, b.H-2, hint, th.dim, th.background)
 }
 
@@ -135,13 +141,47 @@ func (a *app) renderSettings(b *render.Buffer) {
 	b.Reset(th.background)
 	cx := b.W / 2
 	a.drawHeader(b, "SETTINGS", th)
-	top := b.H/2 - 3
+	top := b.H/2 - 4
 	drawValueRow(b, cx-13, top, "Theme", th.name, a.settingSel == setTheme, a.anim, th, th.background)
 	drawValueRow(b, cx-13, top+2, "Start Level", fmt.Sprintf("%d", a.startLevel), a.settingSel == setStartLevel, a.anim, th, th.background)
 	drawValueRow(b, cx-13, top+4, "Color Mode", a.colorModeLabel(), a.settingSel == setColorMode, a.anim, th, th.background)
+	kbFg, kbMarker := selStyle(a.settingSel == setKeybinds, a.anim, th)
+	b.Text(cx-13, top+6, kbMarker+"Key Bindings", kbFg, th.background)
 	fg, marker := selStyle(a.settingSel == setBack, a.anim, th)
-	b.Text(cx-13, top+6, marker+"Back", fg, th.background)
-	hint := "↑/↓ row   ◂/▸ change   esc back"
+	b.Text(cx-13, top+8, marker+"Back", fg, th.background)
+	hint := "↑/↓ row   ◂/▸ change   ⏎ open   esc back"
+	b.Text(cx-len(hint)/2, b.H-2, hint, th.dim, th.background)
+}
+
+func (a *app) renderKeybinds(b *render.Buffer) {
+	th := themes[a.themeIdx]
+	b.Reset(th.background)
+	cx := b.W / 2
+	a.drawHeader(b, "KEY BINDINGS", th)
+	top := 5
+	for i, e := range input.Bindable {
+		fg, marker := selStyle(i == a.bindSel, a.anim, th)
+		b.Text(cx-16, top+i, marker+input.Label(e), fg, th.background)
+		key := input.KeyLabel(a.keymap[e])
+		val := th.text
+		if i == a.bindSel {
+			val = th.pieces[game.S]
+			if a.capturing {
+				key = "press a key…"
+				val = th.pieces[game.O]
+			}
+		}
+		b.Text(cx+2, top+i, key, val, th.background)
+	}
+	resetIdx := len(input.Bindable)
+	rFg, rMarker := selStyle(a.bindSel == resetIdx, a.anim, th)
+	b.Text(cx-16, top+resetIdx+1, rMarker+"Reset to Defaults", rFg, th.background)
+	bFg, bMarker := selStyle(a.bindSel == resetIdx+1, a.anim, th)
+	b.Text(cx-16, top+resetIdx+2, bMarker+"Back", bFg, th.background)
+	if a.bindMsg != "" {
+		b.Text(cx-16, top+resetIdx+4, a.bindMsg, th.dim, th.background)
+	}
+	hint := "↑/↓ row   ⏎ rebind   esc back"
 	b.Text(cx-len(hint)/2, b.H-2, hint, th.dim, th.background)
 }
 
@@ -249,7 +289,7 @@ func (a *app) renderGameOver(b *render.Buffer) {
 	s.eng.Apply(b, sx, sy)
 	if int(s.collapse) >= game.VisibleRows {
 		a.drawGameOverPanel(b, th)
-		hint := "↑/↓ move   ⏎ select   esc menu   q quit"
+		hint := "↑/↓ move   ⏎ select   esc menu   " + a.quitKeyHint() + " quit"
 		b.Text((b.W-len(hint))/2, b.H-2, hint, th.dim, th.background)
 	}
 }
