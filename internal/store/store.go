@@ -17,6 +17,7 @@ type Entry struct {
 type Settings struct {
 	Theme      int `json:"theme"`
 	StartLevel int `json:"startLevel"`
+	ColorMode  int `json:"colorMode"`
 }
 
 type State struct {

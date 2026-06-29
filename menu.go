@@ -135,11 +135,12 @@ func (a *app) renderSettings(b *render.Buffer) {
 	b.Reset(th.background)
 	cx := b.W / 2
 	a.drawHeader(b, "SETTINGS", th)
-	top := b.H/2 - 2
-	drawValueRow(b, cx-13, top, "Theme", th.name, a.settingSel == 0, a.anim, th, th.background)
-	drawValueRow(b, cx-13, top+2, "Start Level", fmt.Sprintf("%d", a.startLevel), a.settingSel == 1, a.anim, th, th.background)
-	fg, marker := selStyle(a.settingSel == 2, a.anim, th)
-	b.Text(cx-13, top+4, marker+"Back", fg, th.background)
+	top := b.H/2 - 3
+	drawValueRow(b, cx-13, top, "Theme", th.name, a.settingSel == setTheme, a.anim, th, th.background)
+	drawValueRow(b, cx-13, top+2, "Start Level", fmt.Sprintf("%d", a.startLevel), a.settingSel == setStartLevel, a.anim, th, th.background)
+	drawValueRow(b, cx-13, top+4, "Color Mode", a.colorModeLabel(), a.settingSel == setColorMode, a.anim, th, th.background)
+	fg, marker := selStyle(a.settingSel == setBack, a.anim, th)
+	b.Text(cx-13, top+6, marker+"Back", fg, th.background)
 	hint := "↑/↓ row   ◂/▸ change   esc back"
 	b.Text(cx-len(hint)/2, b.H-2, hint, th.dim, th.background)
 }

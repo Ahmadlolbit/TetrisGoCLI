@@ -4,6 +4,16 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strings"
+)
+
+type ColorMode int
+
+const (
+	ColorAuto ColorMode = iota
+	TrueColor
+	Color256
+	Color16
 )
 
 type Color struct {
@@ -62,6 +72,7 @@ type Screen struct {
 	back  *Buffer
 	front *Buffer
 	out   *bufio.Writer
+	mode  ColorMode
 }
 
 func NewScreen(w, h int) *Screen {
@@ -71,7 +82,17 @@ func NewScreen(w, h int) *Screen {
 		back:  NewBuffer(w, h),
 		front: NewBuffer(w, h),
 		out:   bufio.NewWriter(os.Stdout),
+		mode:  TrueColor,
 	}
+}
+
+func (s *Screen) SetColorMode(m ColorMode) {
+	s.mode = m
+	for i := range s.front.Cells {
+		s.front.Cells[i] = Cell{Ch: 0}
+	}
+	fmt.Fprint(s.out, "\x1b[2J")
+	s.out.Flush()
 }
 
 func (s *Screen) Back() *Buffer {
@@ -115,8 +136,7 @@ func (s *Screen) Flush() {
 				fmt.Fprintf(s.out, "\x1b[%d;%dH", y+1, x+1)
 			}
 			if !hasColor || next.FG != curFG || next.BG != curBG {
-				fmt.Fprintf(s.out, "\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm",
-					next.FG.R, next.FG.G, next.FG.B, next.BG.R, next.BG.G, next.BG.B)
+				s.emitColor(next.FG, next.BG)
 				curFG, curBG = next.FG, next.BG
 				hasColor = true
 			}
@@ -130,6 +150,102 @@ func (s *Screen) Flush() {
 		}
 	}
 	s.out.Flush()
+}
+
+func (s *Screen) emitColor(fg, bg Color) {
+	switch s.mode {
+	case Color256:
+		fmt.Fprintf(s.out, "\x1b[38;5;%dm\x1b[48;5;%dm", rgbTo256(fg), rgbTo256(bg))
+	case Color16:
+		fmt.Fprintf(s.out, "\x1b[%dm\x1b[%dm", fgSeq(rgbTo16(fg)), bgSeq(rgbTo16(bg)))
+	default:
+		fmt.Fprintf(s.out, "\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm",
+			fg.R, fg.G, fg.B, bg.R, bg.G, bg.B)
+	}
+}
+
+func fgSeq(i int) int {
+	if i < 8 {
+		return 30 + i
+	}
+	return 90 + i - 8
+}
+
+func bgSeq(i int) int {
+	if i < 8 {
+		return 40 + i
+	}
+	return 100 + i - 8
+}
+
+func sq(x int) int {
+	return x * x
+}
+
+var cubeLevels = [6]int{0, 95, 135, 175, 215, 255}
+
+func rgbTo256(c Color) int {
+	nearest := func(v int) int {
+		best, bd := 0, 1<<30
+		for i, lv := range cubeLevels {
+			d := v - lv
+			if d < 0 {
+				d = -d
+			}
+			if d < bd {
+				bd, best = d, i
+			}
+		}
+		return best
+	}
+	r, g, b := int(c.R), int(c.G), int(c.B)
+	ri, gi, bi := nearest(r), nearest(g), nearest(b)
+	cubeDist := sq(r-cubeLevels[ri]) + sq(g-cubeLevels[gi]) + sq(b-cubeLevels[bi])
+
+	gray := (r + g + b) / 3
+	gi2 := (gray - 3) / 10
+	if gi2 < 0 {
+		gi2 = 0
+	}
+	if gi2 > 23 {
+		gi2 = 23
+	}
+	grayVal := 8 + gi2*10
+	grayDist := sq(r-grayVal) + sq(g-grayVal) + sq(b-grayVal)
+
+	if grayDist < cubeDist {
+		return 232 + gi2
+	}
+	return 16 + 36*ri + 6*gi + bi
+}
+
+var ansi16 = [16]Color{
+	{0, 0, 0}, {170, 0, 0}, {0, 170, 0}, {170, 85, 0},
+	{0, 0, 170}, {170, 0, 170}, {0, 170, 170}, {170, 170, 170},
+	{85, 85, 85}, {255, 85, 85}, {85, 255, 85}, {255, 255, 85},
+	{85, 85, 255}, {255, 85, 255}, {85, 255, 255}, {255, 255, 255},
+}
+
+func rgbTo16(c Color) int {
+	best, bd := 0, 1<<30
+	for i, p := range ansi16 {
+		d := sq(int(c.R)-int(p.R)) + sq(int(c.G)-int(p.G)) + sq(int(c.B)-int(p.B))
+		if d < bd {
+			bd, best = d, i
+		}
+	}
+	return best
+}
+
+func DetectColorMode() ColorMode {
+	ct := strings.ToLower(os.Getenv("COLORTERM"))
+	if strings.Contains(ct, "truecolor") || strings.Contains(ct, "24bit") {
+		return TrueColor
+	}
+	if strings.Contains(os.Getenv("TERM"), "256") {
+		return Color256
+	}
+	return Color16
 }
 
 func Lerp(a, b Color, t float64) Color {

@@ -23,6 +23,14 @@ const (
 	scrGameOver
 )
 
+const (
+	setTheme = iota
+	setStartLevel
+	setColorMode
+	setBack
+	settingsRows
+)
+
 type session struct {
 	g         *game.Game
 	eng       *effects.Engine
@@ -47,6 +55,7 @@ type app struct {
 
 	themeIdx   int
 	startLevel int
+	colorMode  int
 
 	mainSel    int
 	modeSel    int
@@ -80,12 +89,14 @@ func (a *app) loadState() {
 	st := store.Load()
 	a.themeIdx = wrap(st.Settings.Theme, len(themes))
 	a.startLevel = clampLevel(st.Settings.StartLevel)
+	a.colorMode = clampColorMode(st.Settings.ColorMode)
+	a.scr.SetColorMode(resolveColorMode(a.colorMode))
 	a.board.load(st.Scores)
 }
 
 func (a *app) persist() {
 	store.Save(store.State{
-		Settings: store.Settings{Theme: a.themeIdx, StartLevel: a.startLevel},
+		Settings: store.Settings{Theme: a.themeIdx, StartLevel: a.startLevel, ColorMode: a.colorMode},
 		Scores:   a.board.export(),
 	})
 }
@@ -382,15 +393,15 @@ func (a *app) handleModeSelect(ev input.Event) bool {
 func (a *app) handleSettings(ev input.Event) bool {
 	switch {
 	case isUp(ev):
-		a.settingSel = wrap(a.settingSel-1, 3)
+		a.settingSel = wrap(a.settingSel-1, settingsRows)
 	case isDown(ev):
-		a.settingSel = wrap(a.settingSel+1, 3)
+		a.settingSel = wrap(a.settingSel+1, settingsRows)
 	case isLeft(ev):
 		a.adjustSetting(-1)
 	case isRight(ev):
 		a.adjustSetting(1)
 	case isConfirm(ev):
-		if a.settingSel == 2 {
+		if a.settingSel == setBack {
 			a.state = scrMenu
 		} else {
 			a.adjustSetting(1)
@@ -403,10 +414,13 @@ func (a *app) handleSettings(ev input.Event) bool {
 
 func (a *app) adjustSetting(d int) {
 	switch a.settingSel {
-	case 0:
+	case setTheme:
 		a.themeIdx = wrap(a.themeIdx+d, len(themes))
-	case 1:
+	case setStartLevel:
 		a.startLevel = clampLevel(a.startLevel + d)
+	case setColorMode:
+		a.colorMode = wrap(a.colorMode+d, len(colorModeNames))
+		a.scr.SetColorMode(resolveColorMode(a.colorMode))
 	}
 }
 
@@ -548,4 +562,45 @@ func clampLevel(l int) int {
 		return 15
 	}
 	return l
+}
+
+var colorModeNames = []string{"Auto", "Truecolor", "256-color", "16-color"}
+
+func clampColorMode(m int) int {
+	if m < 0 || m >= len(colorModeNames) {
+		return 0
+	}
+	return m
+}
+
+func resolveColorMode(m int) render.ColorMode {
+	switch m {
+	case 1:
+		return render.TrueColor
+	case 2:
+		return render.Color256
+	case 3:
+		return render.Color16
+	default:
+		return render.DetectColorMode()
+	}
+}
+
+func resolvedColorName() string {
+	switch render.DetectColorMode() {
+	case render.Color256:
+		return "256-color"
+	case render.Color16:
+		return "16-color"
+	default:
+		return "Truecolor"
+	}
+}
+
+func (a *app) colorModeLabel() string {
+	m := clampColorMode(a.colorMode)
+	if m == 0 {
+		return "Auto (" + resolvedColorName() + ")"
+	}
+	return colorModeNames[m]
 }
