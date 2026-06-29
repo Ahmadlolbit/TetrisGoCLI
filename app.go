@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"time"
 
 	"awesomeProject/internal/chaos"
@@ -28,6 +29,7 @@ const (
 	setTheme = iota
 	setStartLevel
 	setColorMode
+	setChaos
 	setKeybinds
 	setBack
 	settingsRows
@@ -59,6 +61,13 @@ type app struct {
 	themeIdx   int
 	startLevel int
 	colorMode  int
+	chaosOn    bool
+
+	banner  string
+	bannerT float64
+	glowCol render.Color
+	glowT   float64
+	glowMax float64
 
 	mainSel    int
 	modeSel    int
@@ -101,6 +110,7 @@ func (a *app) loadState() {
 	a.startLevel = clampLevel(st.Settings.StartLevel)
 	a.colorMode = clampColorMode(st.Settings.ColorMode)
 	a.scr.SetColorMode(resolveColorMode(a.colorMode))
+	a.chaosOn = st.Settings.Chaos == 0
 	a.keymap = input.ImportKeymap(st.Keymap)
 	a.in.SetKeymap(a.keymap)
 	a.board.load(st.Scores)
@@ -108,21 +118,22 @@ func (a *app) loadState() {
 
 func (a *app) persist() {
 	store.Save(store.State{
-		Settings: store.Settings{Theme: a.themeIdx, StartLevel: a.startLevel, ColorMode: a.colorMode},
+		Settings: store.Settings{Theme: a.themeIdx, StartLevel: a.startLevel, ColorMode: a.colorMode, Chaos: chaosSetting(a.chaosOn)},
 		Scores:   a.board.export(),
 		Keymap:   input.ExportKeymap(a.keymap),
 	})
 }
 
-func newSession(m mode, seed int64, level int) *session {
-	ch := chaos.New(seed, m.chaosEnabled)
+func newSession(m mode, seed int64, level int, chaosOn bool) *session {
+	ch := chaos.New(seed, m.chaosEnabled && chaosOn)
 	ch.FreqScale = m.chaosFreq
 	return &session{
-		g:        game.NewGameAtLevel(seed, level),
-		eng:      effects.New(seed),
-		ch:       ch,
-		mode:     m,
-		lastRank: -1,
+		g:            game.NewGameAtLevel(seed, level),
+		eng:          effects.New(seed),
+		ch:           ch,
+		mode:         m,
+		chaosToggled: m.chaosEnabled && !chaosOn,
+		lastRank:     -1,
 	}
 }
 
@@ -179,6 +190,12 @@ func (a *app) update(dt float64) {
 		return
 	}
 	a.anim += dt
+	if a.bannerT > 0 {
+		a.bannerT -= dt
+	}
+	if a.glowT > 0 {
+		a.glowT -= dt
+	}
 	switch a.state {
 	case scrPlaying:
 		a.updatePlaying(dt)
@@ -221,6 +238,7 @@ func (a *app) updatePlaying(dt float64) {
 	ox, oy := origin(a.scr.W, a.scr.H)
 	if fired, ok := s.ch.Update(dt, s.g); ok {
 		spawnChaos(s.eng, fired, ox, oy, th)
+		a.flash(chaos.Name(fired), chaosColor(th, fired), 1.4)
 	}
 	s.g.GravityScale = s.mode.gravityScale * s.ch.GravityScale()
 	s.g.ScoreScale = s.ch.ScoreScale()
@@ -230,9 +248,11 @@ func (a *app) updatePlaying(dt float64) {
 		s.ch.OnPiece()
 		s.observe(res)
 		a.comboFeedback(res, ox, oy, th)
+		a.featureBanner(res, th)
 	}
 	if s.g.Level > before {
 		spawnLevelUp(s.eng, ox, oy, th)
+		a.flash("LEVEL "+strconv.Itoa(s.g.Level), th.pieces[game.S], 1.2)
 	}
 	s.elapsed += dt
 	a.checkEnd()
@@ -325,7 +345,8 @@ func (a *app) recordScore() {
 
 func (a *app) startGame(m mode) {
 	a.recentRank = -1
-	a.sess = newSession(m, time.Now().UnixNano(), a.startLevel)
+	a.clearBanner()
+	a.sess = newSession(m, time.Now().UnixNano(), a.startLevel, a.chaosOn)
 	a.state = scrPlaying
 }
 
@@ -334,8 +355,46 @@ func (a *app) restart() {
 		return
 	}
 	a.recentRank = -1
-	a.sess = newSession(a.sess.mode, time.Now().UnixNano(), a.startLevel)
+	a.clearBanner()
+	a.sess = newSession(a.sess.mode, time.Now().UnixNano(), a.startLevel, a.chaosOn)
 	a.state = scrPlaying
+}
+
+func (a *app) clearBanner() {
+	a.banner = ""
+	a.bannerT = 0
+	a.glowT = 0
+}
+
+func (a *app) flash(text string, col render.Color, dur float64) {
+	a.banner = text
+	a.bannerT = dur
+	a.glowCol = col
+	a.glowT = dur
+	a.glowMax = dur
+}
+
+func (a *app) featureBanner(res game.LockResult, th theme) {
+	switch {
+	case res.TSpin != game.TSpinNone && res.Lines > 0:
+		a.flash("T-SPIN "+clearWord(res.Lines), th.pieces[game.T], 1.2)
+	case res.Lines >= 4:
+		a.flash("TETRIS", th.pieces[game.I], 1.2)
+	}
+}
+
+func chaosSetting(on bool) int {
+	if on {
+		return 0
+	}
+	return 1
+}
+
+func chaosColor(th theme, k chaos.Kind) render.Color {
+	if k == chaos.BonusFrenzy {
+		return th.pieces[game.O]
+	}
+	return th.pieces[game.T]
 }
 
 func (a *app) toMenu() {
@@ -515,6 +574,8 @@ func (a *app) adjustSetting(d int) {
 	case setColorMode:
 		a.colorMode = wrap(a.colorMode+d, len(colorModeNames))
 		a.scr.SetColorMode(resolveColorMode(a.colorMode))
+	case setChaos:
+		a.chaosOn = !a.chaosOn
 	}
 }
 
@@ -623,8 +684,10 @@ func (a *app) applyGame(ev input.Event) {
 		s.ch.OnPiece()
 		s.observe(res)
 		a.comboFeedback(res, ox, oy, th)
+		a.featureBanner(res, th)
 		if s.g.Level > before {
 			spawnLevelUp(s.eng, ox, oy, th)
+			a.flash("LEVEL "+strconv.Itoa(s.g.Level), th.pieces[game.S], 1.2)
 		}
 	case input.RotateCW:
 		s.g.Rotate(game.CW)

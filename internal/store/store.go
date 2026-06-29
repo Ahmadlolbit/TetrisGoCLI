@@ -18,6 +18,7 @@ type Settings struct {
 	Theme      int `json:"theme"`
 	StartLevel int `json:"startLevel"`
 	ColorMode  int `json:"colorMode"`
+	Chaos      int `json:"chaos"`
 }
 
 type State struct {
