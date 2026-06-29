@@ -245,7 +245,7 @@ func (a *app) updateGameOver(dt float64) {
 	ox, oy := origin(a.scr.W, a.scr.H)
 	bx, by := boardInterior(ox, oy)
 	prev := int(s.collapse)
-	s.collapse += dt * 42
+	s.collapse += dt * 60
 	now := int(s.collapse)
 	if now > game.VisibleRows {
 		now = game.VisibleRows
