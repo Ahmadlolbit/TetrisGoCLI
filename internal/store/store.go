@@ -23,6 +23,7 @@ type Settings struct {
 type State struct {
 	Settings Settings           `json:"settings"`
 	Scores   map[string][]Entry `json:"scores"`
+	Keymap   map[string]string  `json:"keymap,omitempty"`
 }
 
 func dir() string {

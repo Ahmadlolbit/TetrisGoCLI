@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 type Event int
@@ -24,18 +25,207 @@ const (
 	Quit
 )
 
+type Key string
+
+type Keymap map[Event]Key
+
+var Bindable = []Event{
+	MoveLeft, MoveRight, SoftDrop, HardDrop,
+	RotateCW, RotateCCW, Hold,
+	Pause, Restart, ThemeNext, ToggleChaos, Quit,
+}
+
+func DefaultKeymap() Keymap {
+	return Keymap{
+		MoveLeft:    "h",
+		MoveRight:   "l",
+		SoftDrop:    "j",
+		HardDrop:    "space",
+		RotateCW:    "x",
+		RotateCCW:   "z",
+		Hold:        "c",
+		Pause:       "p",
+		Restart:     "r",
+		ThemeNext:   "t",
+		ToggleChaos: "m",
+		Quit:        "q",
+	}
+}
+
+var actionIDs = map[Event]string{
+	MoveLeft:    "moveLeft",
+	MoveRight:   "moveRight",
+	SoftDrop:    "softDrop",
+	HardDrop:    "hardDrop",
+	RotateCW:    "rotateCW",
+	RotateCCW:   "rotateCCW",
+	Hold:        "hold",
+	Pause:       "pause",
+	Restart:     "restart",
+	ThemeNext:   "theme",
+	ToggleChaos: "chaos",
+	Quit:        "quit",
+}
+
+var actionLabels = map[Event]string{
+	MoveLeft:    "Move Left",
+	MoveRight:   "Move Right",
+	SoftDrop:    "Soft Drop",
+	HardDrop:    "Hard Drop",
+	RotateCW:    "Rotate CW",
+	RotateCCW:   "Rotate CCW",
+	Hold:        "Hold",
+	Pause:       "Pause",
+	Restart:     "Restart",
+	ThemeNext:   "Cycle Theme",
+	ToggleChaos: "Toggle Chaos",
+	Quit:        "Quit",
+}
+
+func ActionID(e Event) string { return actionIDs[e] }
+
+func Label(e Event) string { return actionLabels[e] }
+
+func actionByID(id string) (Event, bool) {
+	for e, s := range actionIDs {
+		if s == id {
+			return e, true
+		}
+	}
+	return 0, false
+}
+
+var fixed = map[Key]Event{
+	"up":    RotateCW,
+	"k":     RotateCW,
+	"down":  SoftDrop,
+	"left":  MoveLeft,
+	"right": MoveRight,
+	"enter": Select,
+	"esc":   Pause,
+}
+
+func Reserved(k Key) bool {
+	if k == "c-c" {
+		return true
+	}
+	_, ok := fixed[k]
+	return ok
+}
+
+func KeyLabel(k Key) string {
+	switch k {
+	case "":
+		return "—"
+	case "space":
+		return "Space"
+	case "enter":
+		return "Enter"
+	case "esc":
+		return "Esc"
+	case "up":
+		return "Up"
+	case "down":
+		return "Down"
+	case "left":
+		return "Left"
+	case "right":
+		return "Right"
+	}
+	return strings.ToUpper(string(k))
+}
+
+func compile(m Keymap) map[Key]Event {
+	out := make(map[Key]Event, len(m)+len(fixed))
+	for e, k := range m {
+		if k == "" || Reserved(k) {
+			continue
+		}
+		out[k] = e
+	}
+	for k, e := range fixed {
+		out[k] = e
+	}
+	return out
+}
+
+func ExportKeymap(m Keymap) map[string]string {
+	out := make(map[string]string, len(m))
+	for e, k := range m {
+		if id, ok := actionIDs[e]; ok {
+			out[id] = string(k)
+		}
+	}
+	return out
+}
+
+func ImportKeymap(p map[string]string) Keymap {
+	def := DefaultKeymap()
+	m := make(Keymap, len(def))
+	used := make(map[Key]bool)
+	assign := func(e Event, k Key) {
+		if k == "" || Reserved(k) || used[k] {
+			return
+		}
+		m[e] = k
+		used[k] = true
+	}
+	for _, e := range Bindable {
+		if ks, ok := p[ActionID(e)]; ok {
+			assign(e, Key(strings.ToLower(ks)))
+		}
+	}
+	for _, e := range Bindable {
+		if _, ok := m[e]; !ok {
+			assign(e, def[e])
+		}
+	}
+	return m
+}
+
 type Reader struct {
-	events chan Event
+	events    chan Event
+	captures  chan Key
+	mu        sync.RWMutex
+	lookup    map[Key]Event
+	capturing bool
 }
 
 func (r *Reader) Events() <-chan Event {
 	return r.events
 }
 
+func (r *Reader) Captures() <-chan Key {
+	return r.captures
+}
+
+func (r *Reader) SetKeymap(m Keymap) {
+	c := compile(m)
+	r.mu.Lock()
+	r.lookup = c
+	r.mu.Unlock()
+}
+
+func (r *Reader) BeginCapture() {
+	r.mu.Lock()
+	r.capturing = true
+	r.mu.Unlock()
+}
+
+func (r *Reader) EndCapture() {
+	r.mu.Lock()
+	r.capturing = false
+	r.mu.Unlock()
+}
+
 func Start() (*Reader, func()) {
 	saved := captureState()
 	rawMode()
-	r := &Reader{events: make(chan Event, 64)}
+	r := &Reader{
+		events:   make(chan Event, 64),
+		captures: make(chan Key, 8),
+	}
+	r.SetKeymap(DefaultKeymap())
 	go r.loop()
 	restore := func() {
 		if saved != "" {
@@ -60,52 +250,67 @@ func (r *Reader) loop() {
 
 func (r *Reader) parse(b []byte) {
 	for i := 0; i < len(b); i++ {
-		switch b[i] {
-		case 3, 'q':
-			r.emit(Quit)
-		case '\r', '\n':
-			r.emit(Select)
-		case ' ':
-			r.emit(HardDrop)
-		case 'z', 'Z':
-			r.emit(RotateCCW)
-		case 'x', 'X':
-			r.emit(RotateCW)
-		case 'c', 'C':
-			r.emit(Hold)
-		case 'h':
-			r.emit(MoveLeft)
-		case 'l':
-			r.emit(MoveRight)
-		case 'j':
-			r.emit(SoftDrop)
-		case 'k':
-			r.emit(RotateCW)
-		case 'p', 'P':
-			r.emit(Pause)
-		case 'r', 'R':
-			r.emit(Restart)
-		case 't', 'T':
-			r.emit(ThemeNext)
-		case 'm', 'M':
-			r.emit(ToggleChaos)
-		case 0x1b:
+		if b[i] == 0x1b {
 			if i+2 < len(b) && b[i+1] == '[' {
 				switch b[i+2] {
 				case 'A':
-					r.emit(RotateCW)
+					r.dispatch("up")
 				case 'B':
-					r.emit(SoftDrop)
+					r.dispatch("down")
 				case 'C':
-					r.emit(MoveRight)
+					r.dispatch("right")
 				case 'D':
-					r.emit(MoveLeft)
+					r.dispatch("left")
 				}
 				i += 2
 			} else {
-				r.emit(Pause)
+				r.dispatch("esc")
 			}
+			continue
 		}
+		r.dispatch(tokenize(b[i]))
+	}
+}
+
+func tokenize(c byte) Key {
+	switch c {
+	case 3:
+		return "c-c"
+	case '\r', '\n':
+		return "enter"
+	case ' ':
+		return "space"
+	}
+	if c < 0x20 || c == 0x7f {
+		return ""
+	}
+	if c >= 'A' && c <= 'Z' {
+		return Key(string(rune(c + 32)))
+	}
+	return Key(string(rune(c)))
+}
+
+func (r *Reader) dispatch(k Key) {
+	if k == "c-c" {
+		r.emit(Quit)
+		return
+	}
+	if k == "" {
+		return
+	}
+	r.mu.RLock()
+	capturing := r.capturing
+	e, ok := r.lookup[k]
+	r.mu.RUnlock()
+	if capturing {
+		select {
+		case r.captures <- k:
+		default:
+		}
+		return
+	}
+	if ok {
+		r.emit(e)
 	}
 }
 
