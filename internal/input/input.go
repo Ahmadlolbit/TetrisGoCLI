@@ -86,15 +86,6 @@ func ActionID(e Event) string { return actionIDs[e] }
 
 func Label(e Event) string { return actionLabels[e] }
 
-func actionByID(id string) (Event, bool) {
-	for e, s := range actionIDs {
-		if s == id {
-			return e, true
-		}
-	}
-	return 0, false
-}
-
 var fixed = map[Key]Event{
 	"up":    RotateCW,
 	"k":     RotateCW,
