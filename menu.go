@@ -141,14 +141,15 @@ func (a *app) renderSettings(b *render.Buffer) {
 	b.Reset(th.background)
 	cx := b.W / 2
 	a.drawHeader(b, "SETTINGS", th)
-	top := b.H/2 - 4
+	top := b.H/2 - 5
 	drawValueRow(b, cx-13, top, "Theme", th.name, a.settingSel == setTheme, a.anim, th, th.background)
 	drawValueRow(b, cx-13, top+2, "Start Level", fmt.Sprintf("%d", a.startLevel), a.settingSel == setStartLevel, a.anim, th, th.background)
 	drawValueRow(b, cx-13, top+4, "Color Mode", a.colorModeLabel(), a.settingSel == setColorMode, a.anim, th, th.background)
+	drawValueRow(b, cx-13, top+6, "Chaos", onOff(a.chaosOn), a.settingSel == setChaos, a.anim, th, th.background)
 	kbFg, kbMarker := selStyle(a.settingSel == setKeybinds, a.anim, th)
-	b.Text(cx-13, top+6, kbMarker+"Key Bindings", kbFg, th.background)
+	b.Text(cx-13, top+8, kbMarker+"Key Bindings", kbFg, th.background)
 	fg, marker := selStyle(a.settingSel == setBack, a.anim, th)
-	b.Text(cx-13, top+8, marker+"Back", fg, th.background)
+	b.Text(cx-13, top+10, marker+"Back", fg, th.background)
 	hint := "↑/↓ row   ◂/▸ change   ⏎ open   esc back"
 	b.Text(cx-len(hint)/2, b.H-2, hint, th.dim, th.background)
 }
@@ -235,6 +236,82 @@ func (a *app) renderPlaying(b *render.Buffer) {
 	draw(b, s.g, s.ch, th, sx, sy)
 	a.drawPlayHUD(b, sx, sy, th)
 	s.eng.Apply(b, sx, sy)
+	a.drawFeatureFX(b, sx, sy, th)
+}
+
+func (a *app) drawFeatureFX(b *render.Buffer, sx, sy int, th theme) {
+	ox, oy := origin(b.W, b.H)
+	bx := ox + boardOffset + sx
+	by := oy + sy
+	w := game.Width*cellW + 2
+	h := game.VisibleRows + 2
+	if a.glowT > 0 && a.glowMax > 0 {
+		t := a.glowT / a.glowMax
+		pulse := 0.55 + 0.45*math.Sin(a.anim*14)
+		edgeGlow(b, bx, by, w, h, a.glowCol, t*pulse)
+	}
+	if a.bannerT > 0 && a.banner != "" {
+		drawCenterBanner(b, bx, by, a.banner, a.glowCol, th)
+	}
+}
+
+func edgeGlow(b *render.Buffer, x, y, w, h int, col render.Color, t float64) {
+	if t < 0 {
+		t = 0
+	}
+	if t > 1 {
+		t = 1
+	}
+	put := func(px, py int) {
+		if px < 0 || py < 0 || px >= b.W || py >= b.H {
+			return
+		}
+		c := b.Cells[py*b.W+px]
+		c.FG = render.Lerp(c.FG, col, t)
+		b.Cells[py*b.W+px] = c
+	}
+	for i := 0; i < w; i++ {
+		put(x+i, y)
+		put(x+i, y+h-1)
+	}
+	for j := 0; j < h; j++ {
+		put(x, y+j)
+		put(x+w-1, y+j)
+	}
+}
+
+func drawCenterBanner(b *render.Buffer, ox, oy int, text string, col render.Color, th theme) {
+	w := game.Width*cellW + 2
+	cy := oy + game.VisibleRows/2
+	bg := render.Lerp(th.background, render.RGB(0, 0, 0), 0.45)
+	for i := 0; i < w; i++ {
+		b.Set(ox+i, cy-1, cellOf(' ', col, bg))
+		b.Set(ox+i, cy, cellOf(' ', col, bg))
+		b.Set(ox+i, cy+1, cellOf(' ', col, bg))
+	}
+	if len(text) > w {
+		text = text[:w]
+	}
+	b.Text(ox+(w-len(text))/2, cy, text, col, bg)
+}
+
+func clearWord(n int) string {
+	switch n {
+	case 1:
+		return "SINGLE"
+	case 2:
+		return "DOUBLE"
+	case 3:
+		return "TRIPLE"
+	}
+	return ""
+}
+
+func onOff(on bool) string {
+	if on {
+		return "On"
+	}
+	return "Off"
 }
 
 func (a *app) drawPlayHUD(b *render.Buffer, sx, sy int, th theme) {

@@ -5,7 +5,7 @@ import "testing"
 func TestSprintWinRecords(t *testing.T) {
 	t.Setenv("CHAOSBLOCKS_CONFIG_DIR", t.TempDir())
 	a := &app{board: newScoreboard(), state: scrPlaying}
-	a.sess = newSession(modeByKind(modeSprint), 1, 1)
+	a.sess = newSession(modeByKind(modeSprint), 1, 1, true)
 	a.sess.g.Lines = modeByKind(modeSprint).sprintLines
 	a.checkEnd()
 	if !a.sess.won {
@@ -22,7 +22,7 @@ func TestSprintWinRecords(t *testing.T) {
 func TestSprintFailDoesNotRecord(t *testing.T) {
 	t.Setenv("CHAOSBLOCKS_CONFIG_DIR", t.TempDir())
 	a := &app{board: newScoreboard(), state: scrPlaying}
-	a.sess = newSession(modeByKind(modeSprint), 1, 1)
+	a.sess = newSession(modeByKind(modeSprint), 1, 1, true)
 	a.sess.g.Lines = 20
 	a.sess.g.Over = true
 	a.checkEnd()
