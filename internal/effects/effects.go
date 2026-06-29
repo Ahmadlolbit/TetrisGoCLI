@@ -15,7 +15,6 @@ type particle struct {
 	life  float64
 	max   float64
 	color render.Color
-	glyph rune
 }
 
 type flash struct {

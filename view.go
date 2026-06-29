@@ -46,10 +46,6 @@ var neon = theme{
 	},
 }
 
-func block(col render.Color) render.Cell {
-	return render.Cell{Ch: '█', FG: col, BG: col}
-}
-
 var pieceGlyph = map[game.PieceType]rune{
 	game.I:       '█',
 	game.O:       '▓',
