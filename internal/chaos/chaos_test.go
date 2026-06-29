@@ -49,6 +49,66 @@ func TestDisabledNeverFires(t *testing.T) {
 	}
 }
 
+func TestRemapIdentityWithoutScramble(t *testing.T) {
+	e := New(1, true)
+	for _, p := range []game.PieceType{game.I, game.O, game.T, game.S, game.Z, game.J, game.L} {
+		if e.Remap(p) != p {
+			t.Fatalf("Remap should be identity with no scramble active, %d -> %d", p, e.Remap(p))
+		}
+	}
+}
+
+func TestRemapScramblePermutes(t *testing.T) {
+	e := New(1, true)
+	e.buildRemap()
+	e.active = ColorScramble
+	seen := map[game.PieceType]bool{}
+	for _, p := range []game.PieceType{game.I, game.O, game.T, game.S, game.Z, game.J, game.L} {
+		r := e.Remap(p)
+		if seen[r] {
+			t.Fatalf("scramble remap is not a bijection: %d repeated", r)
+		}
+		seen[r] = true
+	}
+}
+
+func TestToggleAndReset(t *testing.T) {
+	e := New(1, true)
+	e.active = GravitySpike
+	e.remaining = 5
+	e.meter = 0.5
+	e.Toggle()
+	if e.Enabled || e.active != None || e.remaining != 0 || e.meter != 0 {
+		t.Fatalf("toggle should disable and clear active state: %+v", e)
+	}
+	e.active = LightsDim
+	e.meter = 0.9
+	e.Reset()
+	if e.active != None || e.meter != 0 {
+		t.Fatalf("reset should clear active state and meter: %+v", e)
+	}
+}
+
+func TestActiveEventBlocksNewAndCooldown(t *testing.T) {
+	g := game.NewGame(1)
+	e := New(1, true)
+	e.active = GravitySpike
+	e.remaining = 0.5
+	e.meter = 5
+	if _, ok := e.Update(0.1, g); ok {
+		t.Fatal("no new event should fire while one is active")
+	}
+	if _, ok := e.Update(0.5, g); ok {
+		t.Fatal("expiring an event should not itself fire a new one")
+	}
+	if e.active != None {
+		t.Fatal("event should have expired")
+	}
+	if _, ok := e.Update(0.1, g); ok {
+		t.Fatal("cooldown should block a new event right after one expires")
+	}
+}
+
 func TestScalesTrackActiveEvent(t *testing.T) {
 	g := game.NewGame(1)
 	e := New(1, true)
